@@ -34,6 +34,7 @@ const CATEGORIES = [
 ];
 
 const QUICK_IDS = ["doctor", "baby-doctor", "baby-coming", "delivery", "dentist", "travel", "family", "groceries", "pharmacy"];
+const COLOR_CHOICES = ["#e10600", "#c4492c", "#d56a8a", "#e08aa4", "#d0893a", "#c8962e", "#5a8f4a", "#1f8a84", "#2c6e9b", "#3c6fba", "#5b5ea6", "#8b5e83"];
 const STATUS_TEXT = {
   local: "On this phone",
   connecting: "Connecting you both…",
@@ -75,6 +76,20 @@ const sync = createSync({
 
 function catById(id) {
   return CATEGORIES.find((cat) => cat.id === id) || null;
+}
+
+function cleanColor(value) {
+  const color = String(value || "").trim().toLowerCase();
+  return /^#[0-9a-f]{6}$/.test(color) ? color : "";
+}
+
+function eventColor(event) {
+  return cleanColor(event.color) || (catById(event.category)?.color || "#8d7b6a").toLowerCase();
+}
+
+function colorOptions(event) {
+  const typeColor = (catById(event.category)?.color || "#8d7b6a").toLowerCase();
+  return [...new Set([typeColor, ...COLOR_CHOICES])];
 }
 
 function blankState() {
@@ -180,6 +195,7 @@ function normalize(event) {
     category,
     who,
     note: String(event.note || "").slice(0, 500),
+    color: cleanColor(event.color),
     urgent: !!event.urgent,
     updatedAt: Number(event.updatedAt) || 0,
     deleted: !!event.deleted
@@ -188,7 +204,7 @@ function normalize(event) {
 
 function eventSig(list) {
   return list
-    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.date, event.time, event.title, event.category, event.who, event.note].join("|"))
+    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.date, event.time, event.title, event.category, event.who, event.note, event.color].join("|"))
     .sort()
     .join("\n");
 }
@@ -350,7 +366,7 @@ function renderGrid() {
     dots.className = "dots";
     const colors = [];
     for (const event of events) {
-      const color = catById(event.category)?.color || "#8d7b6a";
+      const color = eventColor(event);
       if (!colors.includes(color)) colors.push(color);
       if (colors.length === 3) break;
     }
@@ -423,12 +439,13 @@ function welcomeCard() {
 
 function eventButton(event) {
   const cat = catById(event.category) || { id: "reminder", color: "#8d7b6a" };
+  const color = eventColor(event);
   const button = document.createElement("button");
   button.type = "button";
   button.className = "event";
-  button.style.setProperty("--c", cat.color);
+  button.style.setProperty("--c", color);
   const bar = document.createElement("i");
-  bar.style.background = cat.color;
+  bar.style.background = color;
   const body = document.createElement("span");
   body.className = "event-body";
   const title = document.createElement("strong");
@@ -458,6 +475,18 @@ function eventButton(event) {
 function planActions(event) {
   const actions = document.createElement("div");
   actions.className = "plan-actions";
+  const edit = document.createElement("button");
+  edit.type = "button";
+  edit.className = "plan-act edit-act";
+  edit.textContent = "Edit";
+  edit.addEventListener("click", () => openEditor(event));
+  const color = document.createElement("button");
+  color.type = "button";
+  color.className = "plan-act color-act";
+  const dot = document.createElement("i");
+  dot.style.background = eventColor(event);
+  color.append(dot, document.createTextNode("Color"));
+  color.addEventListener("click", () => openColorPicker(event));
   const urgent = document.createElement("button");
   urgent.type = "button";
   urgent.className = "plan-act urgent-act";
@@ -476,8 +505,38 @@ function planActions(event) {
     }
     removePlan(event.id);
   });
-  actions.append(urgent, remove);
+  actions.append(edit, color, urgent, remove);
   return actions;
+}
+
+function openColorPicker(event) {
+  returnToDay = $("daySheet").classList.contains("open");
+  const box = $("colorChoices");
+  const current = eventColor(event);
+  box.replaceChildren(...colorOptions(event).map((choice) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "swatch";
+    if (choice === current) button.classList.add("on");
+    button.style.background = choice;
+    button.setAttribute("aria-label", choice === current ? "Current color" : "Choose this color");
+    button.addEventListener("click", () => setEventColor(event.id, choice));
+    return button;
+  }));
+  openSheet($("colorSheet"));
+}
+
+function setEventColor(id, color) {
+  const event = state.events.find((item) => item.id === id && !item.deleted);
+  if (!event) return;
+  const typeColor = (catById(event.category)?.color || "#8d7b6a").toLowerCase();
+  event.color = color === typeColor ? "" : color;
+  event.updatedAt = Date.now();
+  const backToDay = returnToDay;
+  returnToDay = false;
+  commit();
+  if (backToDay) openDay();
+  else closeSheets();
 }
 
 function planRow(event, open) {
@@ -536,7 +595,7 @@ function renderUpcoming() {
     const button = document.createElement("button");
     button.type = "button";
     button.className = "up";
-    button.style.setProperty("--c", cat.color);
+    button.style.setProperty("--c", eventColor(event));
     const text = document.createElement("span");
     text.className = "up-copy";
     const when = document.createElement("strong");
@@ -709,6 +768,7 @@ function openEditor(event) {
       category: "",
       who: "both",
       note: "",
+      color: "",
       urgent: false,
       titleTouched: false
     };
@@ -818,6 +878,7 @@ function saveDraft(event) {
     category: chosen ? chosen.id : "reminder",
     who: draft.who || "both",
     note: $("noteInput").value.trim().slice(0, 500),
+    color: cleanColor(draft.color),
     urgent: !!draft.urgent,
     updatedAt: Date.now(),
     deleted: false
@@ -856,7 +917,7 @@ function deleteDraft() {
 }
 
 function sheets() {
-  return [$("editor"), $("shareSheet"), $("daySheet")];
+  return [$("editor"), $("shareSheet"), $("daySheet"), $("colorSheet")];
 }
 
 function openSheet(sheet) {
@@ -885,7 +946,7 @@ function closeSheets() {
 }
 
 function requestClose() {
-  if ($("editor").classList.contains("open") && returnToDay) {
+  if (($("editor").classList.contains("open") || $("colorSheet").classList.contains("open")) && returnToDay) {
     returnToDay = false;
     openDay();
     return;
