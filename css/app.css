@@ -66,12 +66,21 @@ svg { display: block; }
 
 .month-line {
   display: grid;
-  grid-template-columns: 44px 1fr 44px;
+  grid-template-columns: 56px 1fr 56px;
   align-items: center;
   gap: 8px;
+  margin-bottom: 8px;
 }
 
-.month-copy { text-align: center; min-width: 0; }
+h1 {
+  margin: 0;
+  text-align: center;
+  font-family: var(--serif);
+  font-size: clamp(28px, 8vw, 40px);
+  font-weight: 560;
+  letter-spacing: -0.03em;
+  line-height: 1;
+}
 
 .eyebrow {
   margin: 0;
@@ -82,15 +91,6 @@ svg { display: block; }
   text-transform: uppercase;
 }
 
-h1 {
-  margin: 2px 0 0;
-  font-family: var(--serif);
-  font-size: clamp(32px, 9vw, 44px);
-  font-weight: 560;
-  letter-spacing: -0.03em;
-  line-height: 1;
-}
-
 .nav, .icon-btn {
   width: 44px;
   height: 44px;
@@ -99,6 +99,12 @@ h1 {
   display: grid;
   place-items: center;
   box-shadow: 0 1px 0 rgba(36, 28, 22, 0.05);
+}
+
+.month-nav {
+  width: 56px;
+  height: 56px;
+  background: var(--bg);
 }
 
 .close-sheet {
@@ -121,7 +127,7 @@ h1 {
   justify-content: space-between;
   align-items: center;
   gap: 12px;
-  margin-top: 10px;
+  margin-top: 6px;
 }
 
 .month-count {
