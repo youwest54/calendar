@@ -1,9 +1,9 @@
-const CACHE = "agenda-v4";
+const CACHE = "agenda-v5";
 const FILES = [
   "./",
   "./index.html",
-  "./css/app.css",
-  "./js/app.js",
+  "./css/app.css?v=5",
+  "./js/app.js?v=5",
   "./js/icons.js",
   "./js/sync.js",
   "./manifest.webmanifest",
@@ -28,7 +28,7 @@ self.addEventListener("fetch", (event) => {
   const url = new URL(event.request.url);
   if (url.origin !== self.location.origin || event.request.method !== "GET") return;
   event.respondWith(
-    fetch(event.request)
+    fetch(event.request, { cache: "reload" })
       .then((response) => {
         if (response.ok) {
           const copy = response.clone();
