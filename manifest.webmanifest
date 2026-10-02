@@ -1,0 +1,23 @@
+{
+  "name": "Our Agenda",
+  "short_name": "Agenda",
+  "description": "A shared month agenda for two phones.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#efe6d8",
+  "theme_color": "#efe6d8",
+  "icons": [
+    {
+      "src": "icons/icon-180.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
