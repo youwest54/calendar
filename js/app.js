@@ -1,4 +1,4 @@
-import { categoryMark } from "./icons.js?v=27";
+import { categoryMark } from "./icons.js?v=28";
 import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
 import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY } from "./keys.js";
 
@@ -11,7 +11,7 @@ const CATEGORIES = [
   { id: "pharmacy", label: "Pharmacy", color: "#1f8a84", group: "Health" },
   { id: "vaccine", label: "Vaccination", color: "#3d8b7a", group: "Health" },
   { id: "ultrasound", label: "Ultrasound", color: "#6a8caf", group: "Health" },
-  { id: "baby-coming", label: "Baby coming", color: "#e08aa4", group: "Baby & home" },
+  { id: "administration", label: "Administration", color: "#5c6b7a", group: "Life" },
   { id: "delivery", label: "Delivery", color: "#2f7d6d", group: "Baby & home" },
   { id: "bag", label: "Hospital bag", color: "#a67c52", group: "Baby & home" },
   { id: "prenatal", label: "Prenatal class", color: "#8b5e83", group: "Baby & home" },
@@ -34,7 +34,7 @@ const CATEGORIES = [
   { id: "reminder", label: "Reminder", color: "#8d7b6a", group: "Life" }
 ];
 
-const QUICK_IDS = ["doctor", "baby-doctor", "baby-coming", "delivery", "dentist", "travel", "family", "groceries", "pharmacy"];
+const QUICK_IDS = ["doctor", "baby-doctor", "administration", "delivery", "dentist", "travel", "family", "groceries", "pharmacy"];
 const NOTICE_IDS = ["hour", "day", "3day", "week", "month"];
 const COLOR_CHOICES = ["#e10600", "#c4492c", "#d56a8a", "#e08aa4", "#d0893a", "#c8962e", "#5a8f4a", "#1f8a84", "#2c6e9b", "#3c6fba", "#5b5ea6", "#8b5e83"];
 const STATUS_TEXT = {
@@ -78,7 +78,8 @@ const sync = createSync({
 
 const LEGACY = {
   midwife: { id: "midwife", label: "Midwife", color: "#c46b8a", group: "Health" },
-  playdate: { id: "playdate", label: "Playdate", color: "#d0893a", group: "Baby & home" }
+  playdate: { id: "playdate", label: "Playdate", color: "#d0893a", group: "Baby & home" },
+  "baby-coming": { id: "baby-coming", label: "Baby coming", color: "#e08aa4", group: "Baby & home" }
 };
 
 function catById(id) {
