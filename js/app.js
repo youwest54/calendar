@@ -343,7 +343,9 @@ function renderGrid() {
   const first = new Date(view.year, view.month, 1);
   const lead = (first.getDay() + 6) % 7;
   const daysInMonth = new Date(view.year, view.month + 1, 0).getDate();
-  const total = Math.ceil((lead + daysInMonth) / 7) * 7;
+  const weeks = Math.ceil((lead + daysInMonth) / 7);
+  const total = weeks * 7;
+  $("grid").classList.toggle("weeks-6", weeks > 5);
   const start = new Date(view.year, view.month, 1 - lead);
   const today = todayIso();
   const cells = [];
