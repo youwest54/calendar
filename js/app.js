@@ -197,6 +197,7 @@ function normalize(event) {
     note: String(event.note || "").slice(0, 500),
     color: cleanColor(event.color),
     urgent: !!event.urgent,
+    urgentAt: event.urgent ? (Number(event.urgentAt) || Number(event.updatedAt) || 0) : 0,
     updatedAt: Number(event.updatedAt) || 0,
     deleted: !!event.deleted
   };
@@ -204,7 +205,7 @@ function normalize(event) {
 
 function eventSig(list) {
   return list
-    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.date, event.time, event.title, event.category, event.who, event.note, event.color].join("|"))
+    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.urgentAt || 0, event.date, event.time, event.title, event.category, event.who, event.note, event.color].join("|"))
     .sort()
     .join("\n");
 }
@@ -242,6 +243,7 @@ function absorb(doc) {
   saveState();
   render();
   if (changed) sync.publish();
+  void checkReminders();
 }
 
 function setStatus(mode) {
@@ -555,9 +557,125 @@ function toggleUrgent(id) {
   const event = state.events.find((item) => item.id === id && !item.deleted);
   if (!event) return;
   event.urgent = !event.urgent;
+  event.urgentAt = event.urgent ? Date.now() : 0;
   event.updatedAt = Date.now();
+  if (event.urgent) askNotification();
   commit();
   if ($("daySheet").classList.contains("open")) fillDaySheet();
+  void checkReminders();
+}
+
+const REMINDER_KEY = "our-agenda-reminders-v1";
+const REMINDER_KINDS = [
+  { id: "month", label: "One month before" },
+  { id: "week", label: "One week before" },
+  { id: "day", label: "24 hours before" }
+];
+
+function askNotification() {
+  if (!("Notification" in window) || Notification.permission !== "default") return;
+  void Notification.requestPermission();
+}
+
+function eventWhen(event) {
+  const when = parseISO(event.date);
+  if (/^\d{2}:\d{2}$/.test(event.time || "")) {
+    const [hour, minute] = event.time.split(":").map(Number);
+    when.setHours(hour, minute, 0, 0);
+  } else {
+    when.setHours(9, 0, 0, 0);
+  }
+  return when;
+}
+
+function reminderAt(when, id) {
+  const fire = new Date(when);
+  if (id === "month") {
+    const day = fire.getDate();
+    fire.setDate(1);
+    fire.setMonth(fire.getMonth() - 1);
+    const last = new Date(fire.getFullYear(), fire.getMonth() + 1, 0).getDate();
+    fire.setDate(Math.min(day, last));
+  } else if (id === "week") {
+    fire.setDate(fire.getDate() - 7);
+  } else {
+    fire.setHours(fire.getHours() - 24);
+  }
+  return fire;
+}
+
+function loadReminders() {
+  try {
+    const raw = JSON.parse(localStorage.getItem(REMINDER_KEY) || "{}");
+    return raw && typeof raw === "object" ? raw : {};
+  } catch {
+    return {};
+  }
+}
+
+function saveReminders(map) {
+  localStorage.setItem(REMINDER_KEY, JSON.stringify(map));
+}
+
+async function showReminder(title, body, tag) {
+  if ("Notification" in window && Notification.permission === "granted" && "serviceWorker" in navigator) {
+    try {
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 1500))
+      ]);
+      await reg.showNotification(title, {
+        body,
+        tag,
+        renotify: true,
+        icon: "./icons/calendar-180.png"
+      });
+      return true;
+    } catch {
+      /* show it in the app instead */
+    }
+  }
+  return false;
+}
+
+let reminderLock = false;
+
+async function checkReminders() {
+  if (reminderLock) return;
+  reminderLock = true;
+  try {
+    const now = Date.now();
+    const sent = loadReminders();
+    const live = new Set();
+    const lines = [];
+    for (const event of state.events) {
+      if (!event.deleted && event.urgent) live.add(event.id);
+      if (event.deleted || !event.urgent) continue;
+      const when = eventWhen(event);
+      if (when.getTime() <= now) continue;
+      const marked = Number(event.urgentAt) || 0;
+      const done = new Set(Array.isArray(sent[event.id]) ? sent[event.id] : []);
+      for (const kind of REMINDER_KINDS) {
+        if (done.has(kind.id)) continue;
+        const fire = reminderAt(when, kind.id).getTime();
+        if (fire > now || (marked && fire < marked)) continue;
+        done.add(kind.id);
+        sent[event.id] = [...done];
+        saveReminders(sent);
+        const whenText = `${dayFmt.format(when)}${event.time ? ` · ${event.time}` : ""}`;
+        const body = `${kind.label} · ${whenText}`;
+        const shown = await showReminder(event.title, body, `urgent-${event.id}-${kind.id}`);
+        if (!shown) lines.push(`${event.title}. ${body}`);
+      }
+    }
+    if (lines.length) showToast(lines.join(" · "));
+    for (const id of Object.keys(sent)) {
+      if (!live.has(id)) delete sent[id];
+    }
+    saveReminders(sent);
+  } finally {
+    reminderLock = false;
+  }
 }
 
 function removePlan(id) {
@@ -1256,8 +1374,13 @@ async function boot() {
     setStatus("local");
   }
   document.addEventListener("visibilitychange", () => {
-    if (document.visibilityState === "visible") sync.nudge();
+    if (document.visibilityState === "visible") {
+      sync.nudge();
+      void checkReminders();
+    }
   });
+  void checkReminders();
+  setInterval(() => { void checkReminders(); }, 60000);
   window.addEventListener("pageshow", (event) => {
     if (event.persisted) sync.nudge();
   });
