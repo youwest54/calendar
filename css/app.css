@@ -441,6 +441,72 @@ h1 {
   pointer-events: auto;
 }
 
+.wizard {
+  overflow: hidden;
+}
+
+.day-sheet-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 46dvh;
+  overflow: auto;
+  margin-bottom: 12px;
+}
+
+.day-sheet-list .event { margin-top: 0; }
+
+.step-dots {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin: 0 0 12px;
+}
+
+.step-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e0d4c4;
+}
+
+.step-dot.on, .step-dot.done { background: var(--accent); }
+
+#editor .group { margin: 0 0 10px; }
+
+#editor .cat {
+  min-height: 48px;
+  padding: 6px 10px;
+  font-size: 15px;
+}
+
+.more-types {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.wizard-nav {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.wizard-nav .save { flex: 1; margin: 0; }
+
+.back-btn {
+  flex: 0 0 auto;
+  min-width: 96px;
+  min-height: 52px;
+  padding: 0 16px;
+  border-radius: 16px;
+  background: #efe6d8;
+  font-weight: 600;
+  font-size: 17px;
+}
+
 .sheet:focus { outline: none; }
 
 .handle {

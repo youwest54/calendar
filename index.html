@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=7">
+  <link rel="stylesheet" href="css/app.css?v=8">
 </head>
 <body>
   <main class="app">
@@ -81,7 +81,22 @@
 
   <div id="backdrop" class="backdrop"></div>
 
-  <form id="editor" class="sheet" role="dialog" aria-modal="true" aria-labelledby="editorTitle" tabindex="-1" inert>
+  <div id="daySheet" class="sheet day-sheet" role="dialog" aria-modal="true" aria-labelledby="daySheetTitle" tabindex="-1" inert>
+    <div class="handle" aria-hidden="true"></div>
+    <div class="sheet-head">
+      <div>
+        <p id="daySheetDow" class="dow">Saturday</p>
+        <h2 id="daySheetTitle">3 October</h2>
+      </div>
+      <button type="button" class="nav close-sheet" aria-label="Close">
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
+      </button>
+    </div>
+    <div id="daySheetList" class="day-sheet-list"></div>
+    <button type="button" id="dayAdd" class="save">Add</button>
+  </div>
+
+  <form id="editor" class="sheet wizard" role="dialog" aria-modal="true" aria-labelledby="editorTitle" tabindex="-1" inert>
     <div class="handle" aria-hidden="true"></div>
     <div class="sheet-head">
       <h2 id="editorTitle">New plan</h2>
@@ -89,44 +104,57 @@
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
     </div>
-    <p class="group">Choose a type</p>
-    <div id="categories"></div>
-    <label class="field">
-      <span>What</span>
-      <input id="titleInput" maxlength="80" autocomplete="off" enterkeyhint="done" placeholder="Doctor, dinner, trip…">
-    </label>
-    <label class="field">
-      <span>Day</span>
-      <input id="dateInput" type="date" required>
-    </label>
-    <div class="field">
-      <span>Time</span>
-      <div id="timePresets" class="times">
-        <button type="button" data-time="">Anytime</button>
-        <button type="button" data-time="09:00">Morning</button>
-        <button type="button" data-time="12:00">Noon</button>
-        <button type="button" data-time="15:00">Afternoon</button>
-        <button type="button" data-time="18:00">Evening</button>
+    <div class="step-dots" aria-hidden="true">
+      <i class="step-dot"></i><i class="step-dot"></i><i class="step-dot"></i><i class="step-dot"></i>
+    </div>
+    <div class="step" data-step="0">
+      <p class="group">Choose a type</p>
+      <div id="categories"></div>
+    </div>
+    <div class="step" data-step="1" hidden>
+      <label class="field">
+        <span>What</span>
+        <input id="titleInput" maxlength="80" autocomplete="off" enterkeyhint="next" placeholder="Doctor, dinner, trip…">
+      </label>
+      <label class="field">
+        <span>Day</span>
+        <input id="dateInput" type="date" required>
+      </label>
+    </div>
+    <div class="step" data-step="2" hidden>
+      <div class="field">
+        <span>Time</span>
+        <div id="timePresets" class="times">
+          <button type="button" data-time="">Anytime</button>
+          <button type="button" data-time="09:00">Morning</button>
+          <button type="button" data-time="12:00">Noon</button>
+          <button type="button" data-time="15:00">Afternoon</button>
+          <button type="button" data-time="18:00">Evening</button>
+        </div>
+        <input id="timeInput" type="time" aria-label="Exact time" step="300">
       </div>
-      <input id="timeInput" type="time" aria-label="Exact time" step="300">
     </div>
-    <div class="field">
-      <span>Who is it for?</span>
-      <div id="who" class="who">
-        <button type="button" class="who-btn" data-who="both">Both</button>
-        <button type="button" class="who-btn" data-who="me">Youyou</button>
-        <button type="button" class="who-btn" data-who="partner">Gepo</button>
-        <button type="button" class="who-btn" data-who="baby">Baby</button>
+    <div class="step" data-step="3" hidden>
+      <div class="field">
+        <span>Who is it for?</span>
+        <div id="who" class="who">
+          <button type="button" class="who-btn" data-who="both">Both</button>
+          <button type="button" class="who-btn" data-who="me">Youyou</button>
+          <button type="button" class="who-btn" data-who="partner">Gepo</button>
+          <button type="button" class="who-btn" data-who="baby">Baby</button>
+        </div>
       </div>
+      <label class="field">
+        <span>Note</span>
+        <input id="noteInput" maxlength="500" autocomplete="off" enterkeyhint="done" placeholder="Optional">
+      </label>
     </div>
-    <label class="field">
-      <span>Note</span>
-      <textarea id="noteInput" rows="3" maxlength="500" placeholder="Optional"></textarea>
-    </label>
-    <div class="sheet-actions">
-      <button class="save" type="submit">Save plan</button>
-      <button class="delete" id="deleteBtn" type="button" hidden>Delete</button>
+    <div class="wizard-nav">
+      <button type="button" id="stepBack" class="back-btn" hidden>Back</button>
+      <button type="button" id="stepNext" class="save">Next</button>
+      <button type="submit" id="saveBtn" class="save" hidden>Save plan</button>
     </div>
+    <button class="delete" id="deleteBtn" type="button" hidden>Delete</button>
   </form>
 
   <div id="shareSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="shareTitle" tabindex="-1" inert>
@@ -184,6 +212,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=7"></script>
+  <script type="module" src="js/app.js?v=8"></script>
 </body>
 </html>

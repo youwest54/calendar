@@ -34,7 +34,6 @@ const CATEGORIES = [
 ];
 
 const QUICK_IDS = ["doctor", "baby-doctor", "baby-coming", "delivery", "dentist", "travel", "family", "groceries", "pharmacy"];
-const GROUPS = ["Health", "Baby & home", "Going out", "Life"];
 const STATUS_TEXT = {
   local: "On this phone",
   connecting: "Connecting you both…",
@@ -59,6 +58,9 @@ const view = {
 
 let state = loadState();
 let draft = null;
+let step = 0;
+let typePage = 0;
+let returnToDay = false;
 let toastTimer = 0;
 let statusMode = state.roomId ? "connecting" : "local";
 
@@ -293,6 +295,7 @@ function render() {
   renderGrid();
   renderDay();
   renderUpcoming();
+  if ($("daySheet").classList.contains("open")) fillDaySheet();
   setStatus(statusMode);
 }
 
@@ -367,6 +370,7 @@ function renderGrid() {
       view.year = date.getFullYear();
       view.month = date.getMonth();
       render();
+      openDay();
     });
     cells.push(button);
   }
@@ -388,7 +392,7 @@ function renderDay() {
   if (!events.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "Nothing planned. Choose a shortcut, or tap Add.";
+    empty.textContent = "Nothing coming this day.";
     box.append(empty);
     return;
   }
@@ -467,6 +471,7 @@ function renderUpcoming() {
       view.year = date.getFullYear();
       view.month = date.getMonth();
       render();
+      openDay();
     });
     return button;
   }));
@@ -497,28 +502,70 @@ function buildQuick() {
   row.append(more);
 }
 
-function buildCategories() {
+function typePages() {
+  const ordered = [
+    ...QUICK_IDS.map((id) => catById(id)),
+    ...CATEGORIES.filter((cat) => !QUICK_IDS.includes(cat.id))
+  ];
+  const pages = [];
+  for (let i = 0; i < ordered.length; i += 8) pages.push(ordered.slice(i, i + 8));
+  return pages;
+}
+
+function renderTypes() {
+  const pages = typePages();
+  if (typePage >= pages.length) typePage = 0;
   const box = $("categories");
-  for (const group of GROUPS) {
-    const heading = document.createElement("p");
-    heading.className = "group";
-    heading.textContent = group;
-    const grid = document.createElement("div");
-    grid.className = "cat-grid";
-    for (const cat of CATEGORIES.filter((item) => item.group === group)) {
-      const button = document.createElement("button");
-      button.type = "button";
-      button.className = "cat";
-      button.dataset.id = cat.id;
-      button.style.setProperty("--c", cat.color);
-      const label = document.createElement("span");
-      label.textContent = cat.label;
-      button.append(categoryMark(cat.id), label);
-      button.addEventListener("click", () => chooseCategory(cat.id));
-      grid.append(button);
-    }
-    box.append(heading, grid);
+  box.replaceChildren();
+  const grid = document.createElement("div");
+  grid.className = "cat-grid";
+  for (const cat of pages[typePage]) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "cat";
+    if (draft && draft.category === cat.id) button.classList.add("on");
+    button.dataset.id = cat.id;
+    button.style.setProperty("--c", cat.color);
+    const label = document.createElement("span");
+    label.textContent = cat.label;
+    button.append(categoryMark(cat.id), label);
+    button.addEventListener("click", () => chooseCategory(cat.id));
+    grid.append(button);
   }
+  box.append(grid);
+  if (pages.length > 1) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "more-types";
+    more.textContent = typePage < pages.length - 1 ? "More types" : "Main types";
+    more.addEventListener("click", () => {
+      typePage = typePage < pages.length - 1 ? typePage + 1 : 0;
+      renderTypes();
+    });
+    box.append(more);
+  }
+}
+
+function fillDaySheet() {
+  const date = parseISO(view.selected);
+  $("daySheetDow").textContent = dowFmt.format(date);
+  $("daySheetTitle").textContent = dayFmt.format(date);
+  const events = plansOn(view.selected);
+  const box = $("daySheetList");
+  box.replaceChildren();
+  if (!events.length) {
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Nothing coming this day.";
+    box.append(empty);
+    return;
+  }
+  for (const event of events) box.append(eventButton(event));
+}
+
+function openDay() {
+  fillDaySheet();
+  openSheet($("daySheet"));
 }
 
 function quickAdd(id) {
@@ -559,6 +606,7 @@ function undo(id) {
 }
 
 function openEditor(event) {
+  returnToDay = $("daySheet").classList.contains("open");
   draft = event
     ? { ...event, titleTouched: true }
     : {
@@ -571,8 +619,46 @@ function openEditor(event) {
       note: "",
       titleTouched: false
     };
+  typePage = 0;
   fillEditor();
+  renderTypes();
+  showStep(0);
   openSheet($("editor"));
+}
+
+function showStep(index) {
+  step = index;
+  document.querySelectorAll("#editor .step").forEach((el) => {
+    el.hidden = Number(el.dataset.step) !== index;
+  });
+  $("stepBack").hidden = index === 0;
+  $("stepNext").hidden = index === 3;
+  $("saveBtn").hidden = index !== 3;
+  $("deleteBtn").hidden = index !== 3 || !draft.id;
+  document.querySelectorAll(".step-dot").forEach((dot, i) => {
+    dot.classList.toggle("on", i === index);
+    dot.classList.toggle("done", i < index);
+  });
+}
+
+function goNext() {
+  if (step === 0 && !draft.category) {
+    showToast("Choose a type.");
+    return;
+  }
+  if (step === 1) {
+    const title = $("titleInput").value.trim();
+    const date = $("dateInput").value;
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+      showToast("Choose a day.");
+      return;
+    }
+    draft.date = date;
+    draft.title = title || catById(draft.category)?.label || "Plan";
+    $("titleInput").value = draft.title;
+  }
+  if (step === 2) draft.time = cleanTime($("timeInput").value);
+  showStep(Math.min(step + 1, 3));
 }
 
 function fillEditor() {
@@ -623,6 +709,10 @@ function markTime() {
 
 function saveDraft(event) {
   event.preventDefault();
+  if (step < 3) {
+    goNext();
+    return;
+  }
   const chosen = catById(draft.category);
   const title = $("titleInput").value.trim() || chosen?.label || "Plan";
   const date = $("dateInput").value;
@@ -645,8 +735,10 @@ function saveDraft(event) {
   view.selected = date;
   view.year = parsed.getFullYear();
   view.month = parsed.getMonth();
+  returnToDay = false;
   closeSheets();
   commit();
+  openDay();
 }
 
 function deleteDraft() {
@@ -661,13 +753,19 @@ function deleteDraft() {
     event.deleted = true;
     event.updatedAt = Date.now();
   }
+  returnToDay = false;
   closeSheets();
   commit();
+  openDay();
+}
+
+function sheets() {
+  return [$("editor"), $("shareSheet"), $("daySheet")];
 }
 
 function openSheet(sheet) {
   hideToast();
-  for (const node of [$("editor"), $("shareSheet")]) {
+  for (const node of sheets()) {
     node.classList.remove("open");
     node.inert = true;
     node.setAttribute("aria-hidden", "true");
@@ -682,12 +780,22 @@ function openSheet(sheet) {
 
 function closeSheets() {
   $("backdrop").classList.remove("open");
-  for (const node of [$("editor"), $("shareSheet")]) {
+  for (const node of sheets()) {
     node.classList.remove("open");
     node.inert = true;
     node.setAttribute("aria-hidden", "true");
   }
   document.body.classList.remove("lock");
+}
+
+function requestClose() {
+  if ($("editor").classList.contains("open") && returnToDay) {
+    returnToDay = false;
+    openDay();
+    return;
+  }
+  returnToDay = false;
+  closeSheets();
 }
 
 function showToast(text, actions) {
@@ -898,6 +1006,9 @@ function bind() {
   $("nextMonth").addEventListener("click", () => shiftMonth(1));
   $("todayBtn").addEventListener("click", goToday);
   $("addBtn").addEventListener("click", () => openEditor(null));
+  $("dayAdd").addEventListener("click", () => openEditor(null));
+  $("stepNext").addEventListener("click", goNext);
+  $("stepBack").addEventListener("click", () => showStep(Math.max(step - 1, 0)));
   $("shareBtn").addEventListener("click", openShare);
   $("editor").addEventListener("submit", saveDraft);
   $("deleteBtn").addEventListener("click", deleteDraft);
@@ -933,11 +1044,11 @@ function bind() {
     });
   });
   document.querySelectorAll(".close-sheet").forEach((button) => {
-    button.addEventListener("click", closeSheets);
+    button.addEventListener("click", requestClose);
   });
-  $("backdrop").addEventListener("click", closeSheets);
+  $("backdrop").addEventListener("click", requestClose);
   document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") closeSheets();
+    if (event.key === "Escape") requestClose();
     if (event.target.closest("input, textarea")) return;
     if (event.key === "ArrowLeft") shiftMonth(-1);
     if (event.key === "ArrowRight") shiftMonth(1);
@@ -972,7 +1083,6 @@ function claimLink() {
 async function boot() {
   claimLink();
   buildQuick();
-  buildCategories();
   bind();
   render();
   if (state.roomId && state.key && validKey(state.key)) {
