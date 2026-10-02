@@ -1,4 +1,4 @@
-import { categoryMark } from "./icons.js";
+import { categoryMark } from "./icons.js?v=27";
 import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
 import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY } from "./keys.js";
 
@@ -10,13 +10,11 @@ const CATEGORIES = [
   { id: "dentist", label: "Dentist", color: "#3c6fba", group: "Health" },
   { id: "pharmacy", label: "Pharmacy", color: "#1f8a84", group: "Health" },
   { id: "vaccine", label: "Vaccination", color: "#3d8b7a", group: "Health" },
-  { id: "midwife", label: "Midwife", color: "#c46b8a", group: "Health" },
   { id: "ultrasound", label: "Ultrasound", color: "#6a8caf", group: "Health" },
   { id: "baby-coming", label: "Baby coming", color: "#e08aa4", group: "Baby & home" },
   { id: "delivery", label: "Delivery", color: "#2f7d6d", group: "Baby & home" },
   { id: "bag", label: "Hospital bag", color: "#a67c52", group: "Baby & home" },
   { id: "prenatal", label: "Prenatal class", color: "#8b5e83", group: "Baby & home" },
-  { id: "playdate", label: "Playdate", color: "#d0893a", group: "Baby & home" },
   { id: "school", label: "School", color: "#5b5ea6", group: "Baby & home" },
   { id: "travel", label: "Travel", color: "#c4842a", group: "Going out" },
   { id: "family", label: "Family visit", color: "#8a6240", group: "Going out" },
@@ -26,6 +24,8 @@ const CATEGORIES = [
   { id: "birthday", label: "Birthday", color: "#c8962e", group: "Life" },
   { id: "groceries", label: "Groceries", color: "#5a8f4a", group: "Life" },
   { id: "work", label: "Work", color: "#4e5968", group: "Life" },
+  { id: "day-off", label: "Day off", color: "#3d8b7a", group: "Life" },
+  { id: "holiday", label: "Holiday", color: "#d0893a", group: "Life" },
   { id: "call", label: "Call", color: "#6b7c4a", group: "Life" },
   { id: "car", label: "Car", color: "#5c6b73", group: "Life" },
   { id: "bills", label: "Bills", color: "#8b6914", group: "Life" },
@@ -76,8 +76,13 @@ const sync = createSync({
   onStatus: setStatus
 });
 
+const LEGACY = {
+  midwife: { id: "midwife", label: "Midwife", color: "#c46b8a", group: "Health" },
+  playdate: { id: "playdate", label: "Playdate", color: "#d0893a", group: "Baby & home" }
+};
+
 function catById(id) {
-  return CATEGORIES.find((cat) => cat.id === id) || null;
+  return CATEGORIES.find((cat) => cat.id === id) || LEGACY[id] || null;
 }
 
 function cleanEnd(date, end) {
