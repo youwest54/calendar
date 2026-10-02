@@ -35,6 +35,7 @@ const CATEGORIES = [
 ];
 
 const QUICK_IDS = ["doctor", "baby-doctor", "baby-coming", "delivery", "dentist", "travel", "family", "groceries", "pharmacy"];
+const NOTICE_IDS = ["hour", "day", "3day", "week", "month"];
 const COLOR_CHOICES = ["#e10600", "#c4492c", "#d56a8a", "#e08aa4", "#d0893a", "#c8962e", "#5a8f4a", "#1f8a84", "#2c6e9b", "#3c6fba", "#5b5ea6", "#8b5e83"];
 const STATUS_TEXT = {
   local: "On this phone",
@@ -77,6 +78,21 @@ const sync = createSync({
 
 function catById(id) {
   return CATEGORIES.find((cat) => cat.id === id) || null;
+}
+
+function cleanEnd(date, end) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(end || "") || end <= date) return "";
+  return end;
+}
+
+function cleanNotices(event) {
+  if (Array.isArray(event.notices)) return NOTICE_IDS.filter((id) => event.notices.includes(id));
+  if (event.urgent) return ["day", "week", "month"];
+  return [];
+}
+
+function eventEnd(event) {
+  return event.end && event.end > event.date ? event.end : event.date;
 }
 
 function cleanColor(value) {
@@ -198,6 +214,9 @@ function normalize(event) {
     who,
     note: String(event.note || "").slice(0, 500),
     color: cleanColor(event.color),
+    end: cleanEnd(event.date, event.end),
+    notices: cleanNotices(event),
+    noticeAt: Number(event.noticeAt) || (!Array.isArray(event.notices) && event.urgent ? (Number(event.urgentAt) || Number(event.updatedAt) || 0) : 0),
     urgent: !!event.urgent,
     urgentAt: event.urgent ? (Number(event.urgentAt) || Number(event.updatedAt) || 0) : 0,
     updatedAt: Number(event.updatedAt) || 0,
@@ -207,7 +226,7 @@ function normalize(event) {
 
 function eventSig(list) {
   return list
-    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.urgentAt || 0, event.date, event.time, event.title, event.category, event.who, event.note, event.color].join("|"))
+    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.urgentAt || 0, event.noticeAt || 0, (event.notices || []).join(","), event.date, event.end || "", event.time, event.title, event.category, event.who, event.note, event.color].join("|"))
     .sort()
     .join("\n");
 }
@@ -302,7 +321,7 @@ function sortPlans(list) {
 }
 
 function plansOn(date) {
-  return sortPlans(state.events.filter((event) => !event.deleted && event.date === date && passes(event)));
+  return sortPlans(state.events.filter((event) => !event.deleted && event.date <= date && eventEnd(event) >= date && passes(event)));
 }
 
 function render() {
@@ -311,7 +330,9 @@ function render() {
   $("yearLabel").textContent = String(view.year);
   document.title = `${monthName} ${view.year} · Family Calendar`;
   const prefix = `${view.year}-${String(view.month + 1).padStart(2, "0")}`;
-  const count = state.events.filter((event) => !event.deleted && passes(event) && event.date.startsWith(prefix)).length;
+  const monthStart = `${prefix}-01`;
+  const monthEnd = iso(new Date(view.year, view.month + 1, 0));
+  const count = state.events.filter((event) => !event.deleted && passes(event) && event.date <= monthEnd && eventEnd(event) >= monthStart).length;
   const plans = count === 0 ? "No plans yet" : count === 1 ? "1 plan" : `${count} plans`;
   $("monthCount").textContent = plans;
   renderFilters();
@@ -383,6 +404,19 @@ function renderGrid() {
       dot.style.background = color;
       dots.append(dot);
     }
+    const col = i % 7;
+    events.filter((event) => eventEnd(event) > event.date).slice(0, 2).forEach((event, index) => {
+      const end = eventEnd(event);
+      const bar = document.createElement("span");
+      bar.className = "span-bar";
+      if (index) bar.classList.add("n1");
+      bar.style.background = eventColor(event);
+      if (col === 0 || event.date === id) bar.classList.add("cap-left");
+      else bar.classList.add("to-left");
+      if (col === 6 || end === id) bar.classList.add("cap-right");
+      else bar.classList.add("to-right");
+      button.append(bar);
+    });
     button.append(num, dots);
     const names = events.slice(0, 3).map((event) => event.title).join(", ");
     const urgentText = events.some((event) => event.urgent) ? ", urgent" : "";
@@ -467,7 +501,8 @@ function eventButton(event) {
   }
   const meta = document.createElement("span");
   meta.className = "meta";
-  meta.textContent = [event.time, whoLabel(event.who)].filter(Boolean).join(" · ");
+  const until = eventEnd(event) !== event.date ? `Until ${dayFmt.format(parseISO(eventEnd(event)))}` : "";
+  meta.textContent = [event.time, until, whoLabel(event.who)].filter(Boolean).join(" · ");
   body.append(title, meta);
   if (event.note) {
     const note = document.createElement("span");
@@ -570,10 +605,16 @@ function toggleUrgent(id) {
 
 const REMINDER_KEY = "our-agenda-reminders-v1";
 const REMINDER_KINDS = [
-  { id: "month", label: "One month before" },
-  { id: "week", label: "One week before" },
-  { id: "day", label: "24 hours before" }
+  { id: "hour", label: "1 hour before" },
+  { id: "day", label: "24 hours before" },
+  { id: "3day", label: "3 days before" },
+  { id: "week", label: "1 week before" },
+  { id: "month", label: "1 month before" }
 ];
+
+function eventNotices(event) {
+  return REMINDER_KINDS.filter((kind) => (event.notices || []).includes(kind.id));
+}
 
 function askNotification() {
   if (!("Notification" in window)) return;
@@ -608,11 +649,12 @@ function collectJobs() {
   const now = Date.now();
   const jobs = [];
   for (const event of state.events) {
-    if (event.deleted || !event.urgent) continue;
+    const kinds = eventNotices(event);
+    if (!kinds.length) continue;
     const when = eventWhen(event);
     if (when.getTime() <= now) continue;
-    const marked = Number(event.urgentAt) || 0;
-    for (const kind of REMINDER_KINDS) {
+    const marked = Number(event.noticeAt) || Number(event.urgentAt) || 0;
+    for (const kind of kinds) {
       const fire = reminderAt(when, kind.id).getTime();
       if (fire < now - 48 * 60 * 60 * 1000 || fire >= when.getTime()) continue;
       if (marked && fire < marked) continue;
@@ -719,6 +761,10 @@ function reminderAt(when, id) {
     fire.setDate(Math.min(day, last));
   } else if (id === "week") {
     fire.setDate(fire.getDate() - 7);
+  } else if (id === "3day") {
+    fire.setDate(fire.getDate() - 3);
+  } else if (id === "hour") {
+    fire.setHours(fire.getHours() - 1);
   } else {
     fire.setHours(fire.getHours() - 24);
   }
@@ -770,13 +816,14 @@ async function checkReminders() {
     const live = new Set();
     const lines = [];
     for (const event of state.events) {
-      if (!event.deleted && event.urgent) live.add(event.id);
-      if (event.deleted || !event.urgent) continue;
+      const chosen = eventNotices(event);
+      if (!event.deleted && chosen.length) live.add(event.id);
+      if (event.deleted || !chosen.length) continue;
       const when = eventWhen(event);
       if (when.getTime() <= now) continue;
-      const marked = Number(event.urgentAt) || 0;
+      const marked = Number(event.noticeAt) || Number(event.urgentAt) || 0;
       const done = new Set(Array.isArray(sent[event.id]) ? sent[event.id] : []);
-      for (const kind of REMINDER_KINDS) {
+      for (const kind of chosen) {
         if (done.has(kind.id)) continue;
         const fire = reminderAt(when, kind.id).getTime();
         if (fire > now || (marked && fire < marked)) continue;
@@ -821,7 +868,7 @@ function removePlan(id) {
 function renderUpcoming() {
   const today = todayIso();
   const list = state.events
-    .filter((event) => !event.deleted && passes(event) && event.date >= today)
+    .filter((event) => !event.deleted && passes(event) && eventEnd(event) >= today)
     .sort((a, b) => Number(b.urgent) - Number(a.urgent) || (a.date < b.date ? -1 : a.date > b.date ? 1 : timeKey(a) - timeKey(b)));
   $("comingCount").textContent = list.length ? String(list.length) : "";
   const box = $("upcoming");
@@ -841,7 +888,10 @@ function renderUpcoming() {
     const text = document.createElement("span");
     text.className = "up-copy";
     const when = document.createElement("strong");
-    when.textContent = dayFmt.format(parseISO(event.date));
+    const finish = eventEnd(event);
+    when.textContent = finish === event.date
+      ? dayFmt.format(parseISO(event.date))
+      : `${dayFmt.format(parseISO(event.date))} – ${dayFmt.format(parseISO(finish))}`;
     const detail = document.createElement("span");
     const dayName = dowFmt.format(parseISO(event.date));
     detail.textContent = `${event.urgent ? "Urgent · " : ""}${dayName}${event.time ? ` · ${event.time}` : ""} · ${event.title}`;
@@ -1011,6 +1061,8 @@ function openEditor(event) {
       who: "both",
       note: "",
       color: "",
+      end: "",
+      notices: [],
       urgent: false,
       titleTouched: false
     };
@@ -1048,7 +1100,13 @@ function goNext() {
       showToast("Choose a day.");
       return;
     }
+    const end = $("endInput").value;
+    if (end && end < date) {
+      showToast("Until has to be the same day or later.");
+      return;
+    }
     draft.date = date;
+    draft.end = end && end > date ? end : "";
     draft.title = title || catById(draft.category)?.label || "Plan";
     $("titleInput").value = draft.title;
   }
@@ -1060,6 +1118,7 @@ function fillEditor() {
   $("editorTitle").textContent = draft.id ? "Edit plan" : "New plan";
   $("titleInput").value = draft.title || "";
   $("dateInput").value = draft.date;
+  $("endInput").value = draft.end || draft.date;
   $("noteInput").value = draft.note || "";
   $("timeInput").value = draft.time || "";
   const remove = $("deleteBtn");
@@ -1075,6 +1134,9 @@ function fillEditor() {
   });
   document.querySelectorAll("#timePresets button").forEach((button) => {
     button.classList.toggle("on", button.dataset.time === (draft.time || ""));
+  });
+  document.querySelectorAll("#notices button").forEach((button) => {
+    button.classList.toggle("on", (draft.notices || []).includes(button.dataset.notice));
   });
 }
 
@@ -1108,20 +1170,30 @@ function saveDraft(event) {
     goNext();
     return;
   }
+  if ((draft.notices || []).length) askNotification();
   const chosen = catById(draft.category);
   const title = $("titleInput").value.trim() || chosen?.label || "Plan";
   const date = $("dateInput").value;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return;
+  const endValue = $("endInput").value;
+  if (endValue && endValue < date) return;
+  const notices = NOTICE_IDS.filter((id) => (draft.notices || []).includes(id));
+  const previous = draft.id ? state.events.find((item) => item.id === draft.id) : null;
+  const sameNotices = previous && (previous.notices || []).join() === notices.join();
   const next = {
     id: draft.id || (crypto.randomUUID ? crypto.randomUUID() : randomSecret(12)),
     date,
+    end: endValue && endValue > date ? endValue : "",
     time: cleanTime($("timeInput").value),
     title: title.slice(0, 80),
     category: chosen ? chosen.id : "reminder",
     who: draft.who || "both",
     note: $("noteInput").value.trim().slice(0, 500),
     color: cleanColor(draft.color),
+    notices,
+    noticeAt: notices.length ? (sameNotices ? (Number(previous.noticeAt) || Date.now()) : Date.now()) : 0,
     urgent: !!draft.urgent,
+    urgentAt: draft.urgent ? (Number(draft.urgentAt) || Date.now()) : 0,
     updatedAt: Date.now(),
     deleted: false
   };
@@ -1433,6 +1505,16 @@ function bind() {
     const button = event.target.closest("button");
     if (!button) return;
     chooseTime(button.dataset.time || "");
+  });
+  $("notices").addEventListener("click", (event) => {
+    const button = event.target.closest("button");
+    if (!button) return;
+    const id = button.dataset.notice;
+    const set = new Set(draft.notices || []);
+    if (set.has(id)) set.delete(id);
+    else set.add(id);
+    draft.notices = NOTICE_IDS.filter((item) => set.has(item));
+    button.classList.toggle("on", set.has(id));
   });
   $("who").addEventListener("click", (event) => {
     const button = event.target.closest("button");
