@@ -15,11 +15,18 @@
 
 * { box-sizing: border-box; }
 
-html { touch-action: manipulation; }
+html {
+  height: 100%;
+  overflow: hidden;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
 
 body {
   margin: 0;
-  min-height: 100dvh;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
   font-family: var(--sans);
   color: var(--ink);
   background: var(--bg);
@@ -49,8 +56,12 @@ svg { display: block; }
 
 .app {
   max-width: 520px;
+  height: 100dvh;
   margin: 0 auto;
-  padding: calc(12px + env(safe-area-inset-top)) 16px calc(28px + env(safe-area-inset-bottom));
+  padding: calc(12px + env(safe-area-inset-top)) 16px calc(8px + env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 .month-line {
@@ -196,7 +207,7 @@ h1 {
 .weekdays span:nth-child(7) { color: #b08978; }
 
 .cell {
-  min-height: 52px;
+  min-height: 44px;
   border-radius: 14px;
   display: flex;
   flex-direction: column;
@@ -239,12 +250,20 @@ h1 {
   display: block;
 }
 
+.day {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
 .day-head {
   display: flex;
   justify-content: space-between;
   align-items: flex-end;
   gap: 12px;
-  margin: 16px 0 10px;
+  margin: 12px 0 8px;
+  flex: 0 0 auto;
 }
 
 .dow {
@@ -384,7 +403,25 @@ h1 {
 
 .note { white-space: pre-wrap; }
 
-.upcoming { margin-top: 4px; }
+.events { flex: 0 0 auto; }
+
+.upcoming {
+  flex: 1;
+  min-height: 0;
+  margin-top: 10px;
+  display: flex;
+  flex-direction: column;
+}
+
+.upcoming[hidden] { display: none; }
+
+#upcoming {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
 
 .more-day {
   width: 100%;

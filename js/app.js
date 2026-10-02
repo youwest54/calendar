@@ -382,29 +382,21 @@ function renderDay() {
   $("dayDow").textContent = dowFmt.format(date);
   $("dayTitle").textContent = dayFmt.format(date);
   const events = plansOn(view.selected);
-  const any = state.events.some((event) => !event.deleted);
   const box = $("dayEvents");
   box.replaceChildren();
-  if (!events.length && !any && !state.dismissedWelcome) {
-    box.append(welcomeCard());
-    return;
-  }
   if (!events.length) {
     const empty = document.createElement("p");
     empty.className = "empty";
-    empty.textContent = "Nothing coming this day.";
+    empty.textContent = "Nothing this day.";
     box.append(empty);
     return;
   }
-  for (const event of events.slice(0, 2)) box.append(eventButton(event));
-  if (events.length > 2) {
-    const more = document.createElement("button");
-    more.type = "button";
-    more.className = "more-day";
-    more.textContent = `${events.length - 2} more this day`;
-    more.addEventListener("click", openDay);
-    box.append(more);
-  }
+  const more = document.createElement("button");
+  more.type = "button";
+  more.className = "more-day";
+  more.textContent = events.length === 1 ? `1 plan this day` : `${events.length} plans this day`;
+  more.addEventListener("click", openDay);
+  box.append(more);
 }
 
 function welcomeCard() {
@@ -463,7 +455,7 @@ function renderUpcoming() {
     return;
   }
   section.hidden = false;
-  $("upcoming").replaceChildren(...list.slice(0, 5).map((event) => {
+  $("upcoming").replaceChildren(...list.map((event) => {
     const cat = catById(event.category) || { id: "reminder", color: "#8d7b6a" };
     const button = document.createElement("button");
     button.type = "button";
@@ -1095,7 +1087,6 @@ function claimLink() {
 
 async function boot() {
   claimLink();
-  buildQuick();
   bind();
   render();
   if (state.roomId && state.key && validKey(state.key)) {
