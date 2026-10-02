@@ -260,12 +260,19 @@ h1 {
 
 .span-bar {
   position: absolute;
-  z-index: 1;
+  z-index: 0;
   left: 0;
   right: 0;
   bottom: 3px;
   height: 6px;
+  opacity: 0.38;
   pointer-events: none;
+}
+
+.cell .num,
+.cell .dots {
+  position: relative;
+  z-index: 1;
 }
 
 .span-bar.n1 { bottom: 11px; }
