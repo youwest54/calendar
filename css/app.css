@@ -244,7 +244,7 @@ h1 {
   justify-content: space-between;
   align-items: flex-end;
   gap: 12px;
-  margin: 22px 0 12px;
+  margin: 16px 0 10px;
 }
 
 .dow {
@@ -384,7 +384,19 @@ h1 {
 
 .note { white-space: pre-wrap; }
 
-.upcoming h3 { margin-top: 26px; }
+.upcoming { margin-top: 4px; }
+
+.more-day {
+  width: 100%;
+  min-height: 44px;
+  margin-top: 8px;
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+.upcoming h3 { margin-top: 0; }
+
+.quick-label { margin-top: 18px; }
 
 .up {
   display: flex;
@@ -394,6 +406,24 @@ h1 {
   padding: 12px 14px;
   margin-bottom: 8px;
   font-size: 16px;
+}
+
+.up-copy {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.up-copy strong {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+}
+
+.up-copy span {
+  color: var(--muted);
+  font-size: 14px;
 }
 
 .up i {

@@ -1,9 +1,9 @@
-const CACHE = "agenda-v8";
+const CACHE = "agenda-v9";
 const FILES = [
   "./",
   "./index.html",
-  "./css/app.css?v=8",
-  "./js/app.js?v=8",
+  "./css/app.css?v=9",
+  "./js/app.js?v=9",
   "./js/icons.js",
   "./js/sync.js",
   "./manifest.webmanifest",

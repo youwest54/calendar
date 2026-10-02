@@ -396,7 +396,15 @@ function renderDay() {
     box.append(empty);
     return;
   }
-  for (const event of events) box.append(eventButton(event));
+  for (const event of events.slice(0, 2)) box.append(eventButton(event));
+  if (events.length > 2) {
+    const more = document.createElement("button");
+    more.type = "button";
+    more.className = "more-day";
+    more.textContent = `${events.length - 2} more this day`;
+    more.addEventListener("click", openDay);
+    box.append(more);
+  }
 }
 
 function welcomeCard() {
@@ -462,8 +470,13 @@ function renderUpcoming() {
     button.className = "up";
     button.style.setProperty("--c", cat.color);
     const text = document.createElement("span");
-    const when = shortFmt.format(parseISO(event.date));
-    text.textContent = `${when}${event.time ? ` · ${event.time}` : ""}  ${event.title}`;
+    text.className = "up-copy";
+    const when = document.createElement("strong");
+    when.textContent = dayFmt.format(parseISO(event.date));
+    const detail = document.createElement("span");
+    const dayName = dowFmt.format(parseISO(event.date));
+    detail.textContent = `${dayName}${event.time ? ` · ${event.time}` : ""} · ${event.title}`;
+    text.append(when, detail);
     button.append(categoryMark(cat.id), text);
     button.addEventListener("click", () => {
       const date = parseISO(event.date);

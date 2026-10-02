@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=8">
+  <link rel="stylesheet" href="css/app.css?v=9">
 </head>
 <body>
   <main class="app">
@@ -63,19 +63,18 @@
     <section class="day" aria-live="polite">
       <div class="day-head">
         <div>
-          <p id="dayDow" class="dow">Friday</p>
-          <h2 id="dayTitle">2 October</h2>
+          <p id="dayDow" class="dow">Thursday</p>
+          <h2 id="dayTitle">8 October</h2>
         </div>
         <button type="button" id="addBtn" class="add-btn">Add</button>
       </div>
+      <section id="upcomingSection" class="upcoming" hidden>
+        <h3>Coming up</h3>
+        <div id="upcoming"></div>
+      </section>
+      <div id="dayEvents" class="events"></div>
       <p class="quick-label">One tap</p>
       <div id="quick" class="quick"></div>
-      <div id="dayEvents" class="events"></div>
-    </section>
-
-    <section id="upcomingSection" class="upcoming" hidden>
-      <h3>Coming up</h3>
-      <div id="upcoming"></div>
     </section>
   </main>
 
@@ -212,6 +211,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=8"></script>
+  <script type="module" src="js/app.js?v=9"></script>
 </body>
 </html>
