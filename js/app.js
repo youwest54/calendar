@@ -447,15 +447,18 @@ function eventButton(event) {
 function renderUpcoming() {
   const today = todayIso();
   const list = state.events
-    .filter((event) => !event.deleted && passes(event) && event.date >= today && event.date !== view.selected)
+    .filter((event) => !event.deleted && passes(event) && event.date >= today)
     .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : timeKey(a) - timeKey(b)));
-  const section = $("upcomingSection");
+  $("comingCount").textContent = list.length ? String(list.length) : "";
+  const box = $("upcoming");
   if (!list.length) {
-    section.hidden = true;
+    const empty = document.createElement("p");
+    empty.className = "empty";
+    empty.textContent = "Nothing coming up.";
+    box.replaceChildren(empty);
     return;
   }
-  section.hidden = false;
-  $("upcoming").replaceChildren(...list.map((event) => {
+  box.replaceChildren(...list.map((event) => {
     const cat = catById(event.category) || { id: "reminder", color: "#8d7b6a" };
     const button = document.createElement("button");
     button.type = "button";
@@ -475,11 +478,22 @@ function renderUpcoming() {
       view.selected = event.date;
       view.year = date.getFullYear();
       view.month = date.getMonth();
+      closeComing();
       render();
       openDay();
     });
     return button;
   }));
+}
+
+function openComing() {
+  $("comingPage").hidden = false;
+  document.querySelector("main").inert = true;
+}
+
+function closeComing() {
+  $("comingPage").hidden = true;
+  document.querySelector("main").inert = false;
 }
 
 function buildQuick() {
@@ -799,8 +813,10 @@ function requestClose() {
     openDay();
     return;
   }
+  const sheetOpen = sheets().some((node) => node.classList.contains("open"));
   returnToDay = false;
   closeSheets();
+  if (!sheetOpen) closeComing();
 }
 
 function showToast(text, actions) {
@@ -1052,6 +1068,8 @@ function bind() {
     button.addEventListener("click", requestClose);
   });
   $("backdrop").addEventListener("click", requestClose);
+  $("comingBtn").addEventListener("click", openComing);
+  $("comingBack").addEventListener("click", closeComing);
   document.addEventListener("keydown", (event) => {
     if (event.key === "Escape") requestClose();
     if (event.target.closest("input, textarea")) return;
