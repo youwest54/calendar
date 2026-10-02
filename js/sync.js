@@ -3,6 +3,29 @@
 
 const BROKER = "wss://broker.hivemq.com:8884/mqtt";
 
+const FAMILY_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+
+export function makeFamilyCode() {
+  const bytes = new Uint8Array(8);
+  crypto.getRandomValues(bytes);
+  return [...bytes].map((byte) => FAMILY_ALPHABET[byte % FAMILY_ALPHABET.length]).join("");
+}
+
+export function cleanFamilyCode(value) {
+  return String(value || "").toUpperCase().replace(/[^ABCDEFGHJKLMNPQRSTUVWXYZ23456789]/g, "").slice(0, 8);
+}
+
+export async function roomFromCode(code) {
+  const clean = cleanFamilyCode(code);
+  if (clean.length !== 8) throw new Error("Bad code");
+  const digest = new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(`family-calendar-v1:${clean}`)));
+  return {
+    code: clean,
+    key: bytesToB64url(digest.slice(0, 16)),
+    home: bytesToB64url(digest.slice(16, 32))
+  };
+}
+
 export function randomSecret(size = 16) {
   const bytes = new Uint8Array(size);
   crypto.getRandomValues(bytes);

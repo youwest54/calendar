@@ -1,5 +1,5 @@
 import { categoryMark } from "./icons.js";
-import { createSync, randomSecret } from "./sync.js";
+import { cleanFamilyCode, createSync, makeFamilyCode, randomSecret, roomFromCode } from "./sync.js";
 
 const STORAGE_KEY = "our-agenda-v1";
 
@@ -79,6 +79,7 @@ function blankState() {
   return {
     roomId: null,
     key: null,
+    code: null,
     deviceId: null,
     names: { me: "Youyou", partner: "Gepo", baby: "Baby", updatedAt: 0 },
     events: [],
@@ -97,6 +98,7 @@ function loadState() {
     return {
       roomId: raw.roomId || null,
       key: raw.key || null,
+      code: cleanFamilyCode(raw.code).length === 8 ? cleanFamilyCode(raw.code) : null,
       deviceId: raw.deviceId || randomSecret(8),
       names: adoptNames(raw.names),
       events: Array.isArray(raw.events) ? raw.events.map(normalize).filter(Boolean) : [],
@@ -112,6 +114,7 @@ function saveState() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
     roomId: state.roomId,
     key: state.key,
+    code: state.code,
     deviceId: state.deviceId,
     names: state.names,
     events: state.events,
@@ -228,6 +231,7 @@ function setStatus(mode) {
   if (!node) return;
   node.dataset.state = mode;
   node.querySelector("span").textContent = STATUS_TEXT[mode] || STATUS_TEXT.local;
+  paintShare();
 }
 
 function iso(date) {
@@ -740,67 +744,88 @@ function readLink(value) {
   return null;
 }
 
-function shareUrl() {
-  const url = new URL(location.href);
-  url.searchParams.set("home", state.roomId);
-  url.hash = state.key;
-  return url.toString();
+function prettyCode(code) {
+  return `${code.slice(0, 4)} ${code.slice(4)}`;
 }
 
-function updateLinkField() {
-  $("linkField").value = state.roomId && state.key ? shareUrl() : "";
+function inFamily() {
+  return !!(state.roomId && state.key && validKey(state.key));
 }
 
-async function ensureRoom() {
-  if (!window.isSecureContext || !crypto?.subtle) {
-    $("shareNote").hidden = false;
-    $("shareNote").textContent = "Open this page with the https link. An http address cannot share the plans.";
-    throw new Error("insecure");
+function paintShare() {
+  const pill = $("sharePill");
+  const local = $("shareLocal");
+  const family = $("shareFamily");
+  if (!pill || !local || !family) return;
+  const shared = inFamily() && !!state.code;
+  local.hidden = shared;
+  family.hidden = !shared;
+  if (!shared) {
+    pill.textContent = inFamily() ? "Shared" : "This phone only";
+    pill.dataset.state = inFamily() && statusMode === "online" ? "online" : "local";
+    return;
   }
-  if (!state.roomId || !state.key) {
-    state.roomId = randomSecret(16);
-    state.key = randomSecret(16);
-    saveState();
-    await sync.start(state.roomId, state.key);
+  const labels = {
+    connecting: "Connecting",
+    online: "Shared",
+    offline: "On this phone"
+  };
+  pill.textContent = labels[statusMode] || "Shared";
+  pill.dataset.state = statusMode === "online" ? "online" : "local";
+  const code = $("familyCode");
+  const copy = $("copyCode");
+  const blurb = $("familyCopy");
+  if (state.code) {
+    code.hidden = false;
+    copy.hidden = false;
+    code.textContent = prettyCode(state.code);
+    blurb.textContent = "Tell Gepo this code. The plans already on this phone come along.";
+  } else {
+    code.hidden = true;
+    copy.hidden = true;
+    blurb.textContent = "Both phones already share this calendar.";
   }
-  if (state.events.length || state.names.updatedAt) sync.publish();
 }
 
-async function makeLink() {
-  await ensureRoom();
-  updateLinkField();
-  return shareUrl();
+function showShareWarning() {
+  const note = $("shareNote");
+  if (window.isSecureContext) {
+    note.hidden = true;
+    return true;
+  }
+  note.hidden = false;
+  note.textContent = "Open https://youwest54.github.io/calendar/ on both iPhones to share.";
+  return false;
 }
 
-async function sendLink() {
-  const button = $("sendBtn");
+async function startFamily() {
+  if (!showShareWarning()) return;
+  const button = $("startFamily");
   button.disabled = true;
   try {
-    const url = await makeLink();
-    if (navigator.share) {
-      try {
-        await navigator.share({ title: "Family Calendar", text: "Open this on your iPhone so Youyou and Gepo see the same plans.", url });
-        return;
-      } catch (error) {
-        if (error && error.name === "AbortError") return;
-      }
-    }
-    await copyText(url);
-  } catch (error) {
-    if (error?.message !== "insecure") showToast("Could not make the link. Check your internet and try again.");
+    const room = await roomFromCode(makeFamilyCode());
+    state.code = room.code;
+    state.roomId = room.home;
+    state.key = room.key;
+    saveState();
+    await sync.start(state.roomId, state.key);
+    if (state.events.length || state.names.updatedAt) sync.publish();
+    paintShare();
+    showToast("Tell Gepo this code.");
+  } catch {
+    showToast("Could not start the family. Check your internet and try again.");
   } finally {
     button.disabled = false;
   }
 }
 
-async function copyText(url) {
+async function copyCode() {
+  if (!state.code) return;
   try {
-    await navigator.clipboard.writeText(url);
-    showToast("Link copied. Send it to Gepo.");
+    await navigator.clipboard.writeText(state.code);
+    showToast("Code copied. Send it to Gepo.");
   } catch {
-    $("linkField").focus();
-    $("linkField").select();
-    showToast("Copy the link, then send it to Gepo.");
+    showToast(`Tell Gepo this code: ${prettyCode(state.code)}`);
   }
 }
 
@@ -808,14 +833,8 @@ function openShare() {
   $("yourName").value = state.names.me;
   $("partnerName").value = state.names.partner;
   $("babyName").value = state.names.baby;
-  updateLinkField();
-  if (!window.isSecureContext) {
-    $("shareNote").hidden = false;
-    $("shareNote").textContent = "Open this page with the https link so both iPhones can share.";
-  } else if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
-    $("shareNote").hidden = false;
-    $("shareNote").textContent = "On both iPhones, open https://youwest54.github.io/calendar/ then tap Share and send that link to Gepo.";
-  }
+  showShareWarning();
+  paintShare();
   openSheet($("shareSheet"));
 }
 
@@ -833,20 +852,27 @@ function saveNames() {
 }
 
 async function joinFromInput() {
-  const parsed = readLink($("joinInput").value.trim());
-  if (!parsed) {
-    showToast("That link does not look right.");
+  if (!showShareWarning()) return;
+  const code = cleanFamilyCode($("joinCode").value);
+  if (code.length !== 8) {
+    showToast("That code needs 8 characters.");
     return;
   }
-  state.roomId = parsed.home;
-  state.key = parsed.key;
-  saveState();
+  const button = $("joinBtn");
+  button.disabled = true;
   try {
+    const room = await roomFromCode(code);
+    state.code = room.code;
+    state.roomId = room.home;
+    state.key = room.key;
+    saveState();
     await sync.start(state.roomId, state.key);
-    closeSheets();
+    paintShare();
     showToast("Joined. Plans will show in a moment.");
   } catch {
-    showToast("Could not join that link.");
+    showToast("Could not join that code.");
+  } finally {
+    button.disabled = false;
   }
 }
 
@@ -875,13 +901,13 @@ function bind() {
   $("shareBtn").addEventListener("click", openShare);
   $("editor").addEventListener("submit", saveDraft);
   $("deleteBtn").addEventListener("click", deleteDraft);
-  $("sendBtn").addEventListener("click", () => { void sendLink(); });
-  $("copyBtn").addEventListener("click", () => {
-    void makeLink().then((url) => copyText(url)).catch((error) => {
-      if (error?.message !== "insecure") showToast("Could not make the link. Check your internet and try again.");
-    });
-  });
+  $("startFamily").addEventListener("click", () => { void startFamily(); });
+  $("copyCode").addEventListener("click", () => { void copyCode(); });
   $("joinBtn").addEventListener("click", () => { void joinFromInput(); });
+  $("joinCode").addEventListener("input", () => {
+    const clean = cleanFamilyCode($("joinCode").value);
+    $("joinCode").value = clean.length > 4 ? `${clean.slice(0, 4)} ${clean.slice(4)}` : clean;
+  });
   for (const id of ["yourName", "partnerName", "babyName"]) {
     $(id).addEventListener("change", saveNames);
   }

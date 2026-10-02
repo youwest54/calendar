@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=6">
+  <link rel="stylesheet" href="css/app.css?v=7">
 </head>
 <body>
   <main class="app">
@@ -131,24 +131,36 @@
 
   <div id="shareSheet" class="sheet" role="dialog" aria-modal="true" aria-labelledby="shareTitle" tabindex="-1" inert>
     <div class="handle" aria-hidden="true"></div>
-    <div class="sheet-head">
-      <h2 id="shareTitle">Share</h2>
+    <div class="share-head">
+      <h2 id="shareTitle">Sharing</h2>
+      <span id="sharePill" class="share-pill">This phone only</span>
       <button type="button" class="nav close-sheet" aria-label="Close">
         <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6 6 18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg>
       </button>
     </div>
-    <p class="hint">Send this link to Gepo. Gepo opens it once. After that, new plans show on both iPhones.</p>
     <p id="shareNote" class="hint warn" hidden></p>
-    <button type="button" id="sendBtn" class="save">Send link to Gepo</button>
-    <div class="link-row">
-      <input id="linkField" readonly aria-label="Share link" placeholder="The link appears when you send">
-      <button type="button" id="copyBtn" class="copy">Copy</button>
+    <div id="shareLocal">
+      <p class="share-copy">Right now plans are only on this phone. Start a family to keep them together — everything you already added comes with you.</p>
+      <button type="button" id="startFamily" class="save family-start">
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="9" cy="8" r="2.1" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M4.6 18.2v-.5a4.4 4.4 0 0 1 8.8 0v.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+          <circle cx="16.4" cy="8.8" r="1.7" fill="none" stroke="currentColor" stroke-width="1.8"/>
+          <path d="M15.4 13.4a3.5 3.5 0 0 1 4.4 3.3v1.5" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        </svg>
+        Start our family
+      </button>
+      <p class="share-or"><span>or join one that already exists</span></p>
+      <div class="join-row">
+        <input id="joinCode" maxlength="9" autocapitalize="characters" autocomplete="off" spellcheck="false" enterkeyhint="done" placeholder="8-character code" aria-label="8-character code">
+        <button type="button" id="joinBtn" class="join-btn">Join</button>
+      </div>
     </div>
-    <label class="field">
-      <span>Already have a link?</span>
-      <input id="joinInput" type="url" inputmode="url" autocomplete="off" placeholder="Paste Gepo's link">
-    </label>
-    <button type="button" id="joinBtn" class="copy wide">Join that agenda</button>
+    <div id="shareFamily" hidden>
+      <p id="familyCopy" class="share-copy">Tell Gepo this code. The plans already on this phone come along.</p>
+      <p id="familyCode" class="family-code"></p>
+      <button type="button" id="copyCode" class="copy wide">Copy code</button>
+    </div>
     <p class="group">Names on the plans</p>
     <label class="field">
       <span>Youyou</span>
@@ -168,10 +180,10 @@
       <li>Tap the Share button, then Add to Home Screen.</li>
       <li>Do that on both phones. Open Family Calendar from the home screen next time.</li>
     </ol>
-    <p class="hint">Only send the link to Gepo. Anyone with it can see and change the plans.</p>
+    <p class="hint">Only give the code to Gepo. Anyone with it can see and change the plans.</p>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=6"></script>
+  <script type="module" src="js/app.js?v=7"></script>
 </body>
 </html>
