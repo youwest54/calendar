@@ -516,8 +516,11 @@ h1 {
 .plan-row.urgent .event,
 .plan-row.urgent .up {
   background: #fff;
-  box-shadow: inset 4px 0 0 #e10600, 0 0 0 2px #e10600;
+  border: 1.5px solid #e10600;
+  box-shadow: none;
 }
+
+.plan-row.urgent .event > i { background: #e10600; }
 
 .urgent-badge {
   margin-left: auto;
