@@ -1,5 +1,6 @@
 import { categoryMark } from "./icons.js";
-import { cleanFamilyCode, createSync, makeFamilyCode, randomSecret, roomFromCode } from "./sync.js";
+import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
+import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY } from "./keys.js";
 
 const STORAGE_KEY = "our-agenda-v1";
 
@@ -153,6 +154,7 @@ function commit() {
   saveState();
   render();
   sync.publish();
+  scheduleAlerts();
 }
 
 function clipName(value, fallback) {
@@ -244,6 +246,7 @@ function absorb(doc) {
   render();
   if (changed) sync.publish();
   void checkReminders();
+  scheduleAlerts();
 }
 
 function setStatus(mode) {
@@ -573,8 +576,126 @@ const REMINDER_KINDS = [
 ];
 
 function askNotification() {
-  if (!("Notification" in window) || Notification.permission !== "default") return;
-  void Notification.requestPermission();
+  if (!("Notification" in window)) return;
+  if (Notification.permission === "default") {
+    void Notification.requestPermission().then((result) => {
+      if (result === "granted") void enableAlerts();
+    });
+    return;
+  }
+  if (Notification.permission === "granted") void enableAlerts();
+}
+
+function urlBase64ToUint8Array(value) {
+  const pad = value.length % 4 === 0 ? "" : "=".repeat(4 - (value.length % 4));
+  const b64 = value.replace(/-/g, "+").replace(/_/g, "/") + pad;
+  const bin = atob(b64);
+  const out = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i += 1) out[i] = bin.charCodeAt(i);
+  return out;
+}
+
+function bytesToB64url(bytes) {
+  let bin = "";
+  const chunk = 0x4000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode(...bytes.subarray(i, i + chunk));
+  }
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/g, "");
+}
+
+function collectJobs() {
+  const now = Date.now();
+  const jobs = [];
+  for (const event of state.events) {
+    if (event.deleted || !event.urgent) continue;
+    const when = eventWhen(event);
+    if (when.getTime() <= now) continue;
+    const marked = Number(event.urgentAt) || 0;
+    for (const kind of REMINDER_KINDS) {
+      const fire = reminderAt(when, kind.id).getTime();
+      if (fire < now - 48 * 60 * 60 * 1000 || fire >= when.getTime()) continue;
+      if (marked && fire < marked) continue;
+      const whenText = `${dayFmt.format(when)}${event.time ? ` · ${event.time}` : ""}`;
+      jobs.push({
+        tag: `urgent-${event.id}-${kind.id}`,
+        at: new Date(fire).toISOString(),
+        title: event.title,
+        body: `${kind.label} · ${whenText}`
+      });
+    }
+  }
+  return jobs.slice(0, 100);
+}
+
+async function encryptForServer(obj) {
+  const publicKey = await crypto.subtle.importKey(
+    "spki",
+    Uint8Array.from(atob(REMINDER_PUBLIC_KEY), (char) => char.charCodeAt(0)),
+    { name: "RSA-OAEP", hash: "SHA-256" },
+    false,
+    ["encrypt"]
+  );
+  const aes = await crypto.subtle.generateKey({ name: "AES-GCM", length: 256 }, true, ["encrypt"]);
+  const rawAes = new Uint8Array(await crypto.subtle.exportKey("raw", aes));
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const cipher = new Uint8Array(await crypto.subtle.encrypt(
+    { name: "AES-GCM", iv },
+    aes,
+    new TextEncoder().encode(JSON.stringify(obj))
+  ));
+  const wrapped = new Uint8Array(await crypto.subtle.encrypt({ name: "RSA-OAEP" }, publicKey, rawAes));
+  const joined = new Uint8Array(iv.length + cipher.length);
+  joined.set(iv, 0);
+  joined.set(cipher, iv.length);
+  return `p1.${bytesToB64url(wrapped)}.${bytesToB64url(joined)}`;
+}
+
+let alertBusy = false;
+let alertAgain = false;
+let alertTimer = 0;
+
+function scheduleAlerts() {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  clearTimeout(alertTimer);
+  alertTimer = setTimeout(() => { void enableAlerts(); }, 1200);
+}
+
+async function enableAlerts() {
+  if (alertBusy) {
+    alertAgain = true;
+    return false;
+  }
+  alertBusy = true;
+  try {
+    do {
+      alertAgain = false;
+      if (!window.isSecureContext || !("Notification" in window) || Notification.permission !== "granted") return false;
+      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 4000))
+      ]);
+      let sub = await reg.pushManager.getSubscription();
+      if (!sub) {
+        sub = await reg.pushManager.subscribe({
+          userVisibleOnly: true,
+          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+        });
+      }
+      const message = await encryptForServer({
+        kind: "device",
+        subscription: sub.toJSON(),
+        jobs: collectJobs()
+      });
+      await publishOnce(`ag/push/${state.deviceId}`, message);
+    } while (alertAgain);
+    return true;
+  } catch {
+    return false;
+  } finally {
+    alertBusy = false;
+  }
 }
 
 function eventWhen(event) {
@@ -1385,7 +1506,7 @@ async function boot() {
     if (event.persisted) sync.nudge();
   });
   if ("serviceWorker" in navigator && window.isSecureContext) {
-    navigator.serviceWorker.register("./sw.js").catch(() => {});
+    navigator.serviceWorker.register("./sw.js").then(() => enableAlerts()).catch(() => {});
   }
 }
 

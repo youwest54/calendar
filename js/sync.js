@@ -351,6 +351,35 @@ export function createSync({ getDoc, onRemote, onReady, onStatus }) {
   return { start, publish, nudge, stop };
 }
 
+export function publishOnce(topic, message) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (ok) => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      try { socket.close(); } catch { /* ignore */ }
+      resolve(ok);
+    };
+    const socket = new WebSocket(BROKER, "mqtt");
+    socket.binaryType = "arraybuffer";
+    const timer = setTimeout(() => finish(false), 8000);
+    socket.onerror = () => finish(false);
+    socket.onopen = () => {
+      socket.send(connectPacket(`ag${Math.random().toString(16).slice(2, 12)}`));
+    };
+    socket.onmessage = () => {
+      try {
+        socket.send(publishPacket(topic, message));
+      } catch {
+        finish(false);
+        return;
+      }
+      setTimeout(() => finish(true), 400);
+    };
+  });
+}
+
 function clientId() {
   return `ag${Math.random().toString(16).slice(2, 12)}`;
 }

@@ -1,0 +1,24 @@
+name: Urgent reminders
+
+on:
+  schedule:
+    - cron: "*/15 * * * *"
+  workflow_dispatch:
+
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+      - name: Install sender
+        working-directory: scripts
+        run: npm install web-push mqtt
+      - name: Send due reminders
+        working-directory: scripts
+        env:
+          VAPID_PRIVATE_KEY: ${{ secrets.VAPID_PRIVATE_KEY }}
+          REMINDER_PRIVATE_KEY: ${{ secrets.REMINDER_PRIVATE_KEY }}
+        run: node send-reminders.mjs
