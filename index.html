@@ -10,15 +10,15 @@
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="default">
-  <meta name="apple-mobile-web-app-title" content="Agenda">
-  <title>Our Agenda</title>
+  <meta name="apple-mobile-web-app-title" content="Family Calendar">
+  <title>Family Calendar</title>
   <link rel="icon" href="icons/icon.svg" type="image/svg+xml">
-  <link rel="apple-touch-icon" href="icons/icon-180.png">
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/calendar-180.png">
   <link rel="manifest" href="manifest.webmanifest">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=5">
+  <link rel="stylesheet" href="css/app.css?v=6">
 </head>
 <body>
   <main class="app">
@@ -28,7 +28,7 @@
           <svg width="18" height="18" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
         <div class="month-copy">
-          <p class="eyebrow">Our agenda</p>
+          <p class="eyebrow">Family calendar</p>
           <h1 id="monthLabel">October</h1>
         </div>
         <button type="button" id="nextMonth" class="nav" aria-label="Next month">
@@ -166,12 +166,12 @@
     <ol class="steps">
       <li>Open this page in Safari.</li>
       <li>Tap the Share button, then Add to Home Screen.</li>
-      <li>Do that on both phones. Open Agenda from the home screen next time.</li>
+      <li>Do that on both phones. Open Family Calendar from the home screen next time.</li>
     </ol>
     <p class="hint">Only send the link to Gepo. Anyone with it can see and change the plans.</p>
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=5"></script>
+  <script type="module" src="js/app.js?v=6"></script>
 </body>
 </html>

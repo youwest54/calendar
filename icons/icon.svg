@@ -1,11 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64">
-  <rect width="64" height="64" rx="16" fill="#C4492C"/>
-  <rect x="14" y="18" width="36" height="34" rx="6" fill="#FFFAF3"/>
-  <rect x="14" y="18" width="36" height="12" rx="6" fill="#241C16"/>
-  <rect x="14" y="24" width="36" height="6" fill="#241C16"/>
-  <circle cx="24" cy="18" r="2.4" fill="#FFFAF3"/>
-  <circle cx="40" cy="18" r="2.4" fill="#FFFAF3"/>
-  <circle cx="26" cy="40" r="3" fill="#C4492C"/>
-  <circle cx="34" cy="40" r="3" fill="#2F7D6D"/>
-  <circle cx="42" cy="40" r="3" fill="#3C6FBA"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#C4492C"/>
+  <rect x="162" y="40" width="36" height="68" rx="18" fill="#FFFAF3"/>
+  <rect x="314" y="40" width="36" height="68" rx="18" fill="#FFFAF3"/>
+  <rect x="72" y="84" width="368" height="364" rx="36" fill="#FFFAF3"/>
+  <path d="M72 120a36 36 0 0 1 36-36h296a36 36 0 0 1 36 36v80H72z" fill="#241C16"/>
+  <rect x="166" y="58" width="28" height="54" rx="14" fill="#FFFAF3"/>
+  <rect x="318" y="58" width="28" height="54" rx="14" fill="#FFFAF3"/>
+  <text x="256" y="390" text-anchor="middle" font-family="Georgia, 'Times New Roman', serif" font-size="188" font-weight="700" fill="#241C16">3</text>
 </svg>

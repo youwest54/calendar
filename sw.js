@@ -1,15 +1,15 @@
-const CACHE = "agenda-v5";
+const CACHE = "agenda-v6";
 const FILES = [
   "./",
   "./index.html",
-  "./css/app.css?v=5",
-  "./js/app.js?v=5",
+  "./css/app.css?v=6",
+  "./js/app.js?v=6",
   "./js/icons.js",
   "./js/sync.js",
   "./manifest.webmanifest",
   "./icons/icon.svg",
-  "./icons/icon-180.png",
-  "./icons/icon-512.png"
+  "./icons/calendar-180.png",
+  "./icons/calendar-512.png"
 ];
 
 self.addEventListener("install", (event) => {

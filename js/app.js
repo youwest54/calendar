@@ -280,7 +280,7 @@ function plansOn(date) {
 function render() {
   const monthName = monthFmt.format(new Date(view.year, view.month, 1));
   $("monthLabel").textContent = monthName;
-  document.title = `${monthName} · Our Agenda`;
+  document.title = `${monthName} · Family Calendar`;
   const prefix = `${view.year}-${String(view.month + 1).padStart(2, "0")}`;
   const count = state.events.filter((event) => !event.deleted && passes(event) && event.date.startsWith(prefix)).length;
   const plans = count === 0 ? "No plans yet" : count === 1 ? "1 plan" : `${count} plans`;
@@ -779,7 +779,7 @@ async function sendLink() {
     const url = await makeLink();
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Our agenda", text: "Open this on your iPhone so Youyou and Gepo see the same plans.", url });
+        await navigator.share({ title: "Family Calendar", text: "Open this on your iPhone so Youyou and Gepo see the same plans.", url });
         return;
       } catch (error) {
         if (error && error.name === "AbortError") return;
