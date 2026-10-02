@@ -303,11 +303,12 @@ function plansOn(date) {
 function render() {
   const monthName = monthFmt.format(new Date(view.year, view.month, 1));
   $("monthLabel").textContent = monthName;
-  document.title = `${monthName} · Family Calendar`;
+  $("yearLabel").textContent = String(view.year);
+  document.title = `${monthName} ${view.year} · Family Calendar`;
   const prefix = `${view.year}-${String(view.month + 1).padStart(2, "0")}`;
   const count = state.events.filter((event) => !event.deleted && passes(event) && event.date.startsWith(prefix)).length;
   const plans = count === 0 ? "No plans yet" : count === 1 ? "1 plan" : `${count} plans`;
-  $("monthCount").textContent = `${view.year} · ${plans}`;
+  $("monthCount").textContent = plans;
   renderFilters();
   renderGrid();
   renderDay();

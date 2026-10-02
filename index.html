@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=19">
+  <link rel="stylesheet" href="css/app.css?v=20">
 </head>
 <body>
   <main class="app">
@@ -47,7 +47,10 @@
         <button type="button" id="prevMonth" class="nav month-nav" aria-label="Previous month">
           <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M14 6l-6 6 6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
-        <h1 id="monthLabel">October</h1>
+        <div class="month-copy">
+          <h1 id="monthLabel">October</h1>
+          <p id="yearLabel" class="year">2026</p>
+        </div>
         <button type="button" id="nextMonth" class="nav month-nav" aria-label="Next month">
           <svg width="28" height="28" viewBox="0 0 24 24" aria-hidden="true"><path d="M10 6l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
         </button>
@@ -231,6 +234,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=19"></script>
+  <script type="module" src="js/app.js?v=20"></script>
 </body>
 </html>

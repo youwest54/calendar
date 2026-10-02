@@ -72,14 +72,23 @@ svg { display: block; }
   margin-bottom: 8px;
 }
 
+.month-copy { text-align: center; min-width: 0; }
+
 h1 {
   margin: 0;
-  text-align: center;
   font-family: var(--serif);
   font-size: clamp(28px, 8vw, 40px);
   font-weight: 560;
   letter-spacing: -0.03em;
   line-height: 1;
+}
+
+.year {
+  margin: 4px 0 0;
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  color: var(--ink);
 }
 
 .eyebrow {
