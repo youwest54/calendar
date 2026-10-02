@@ -80,7 +80,7 @@ function blankState() {
     roomId: null,
     key: null,
     deviceId: null,
-    names: { me: "Me", partner: "Wife", baby: "Baby", updatedAt: 0 },
+    names: { me: "Youyou", partner: "Gepo", baby: "Baby", updatedAt: 0 },
     events: [],
     dismissedWelcome: false
   };
@@ -98,12 +98,7 @@ function loadState() {
       roomId: raw.roomId || null,
       key: raw.key || null,
       deviceId: raw.deviceId || randomSecret(8),
-      names: {
-        me: clipName(raw.names?.me, "Me"),
-        partner: clipName(raw.names?.partner, "Wife"),
-        baby: clipName(raw.names?.baby, "Baby"),
-        updatedAt: Number(raw.names?.updatedAt) || 0
-      },
+      names: adoptNames(raw.names),
       events: Array.isArray(raw.events) ? raw.events.map(normalize).filter(Boolean) : [],
       dismissedWelcome: !!raw.dismissedWelcome
     };
@@ -143,6 +138,28 @@ function commit() {
 function clipName(value, fallback) {
   const text = String(value || "").trim().slice(0, 24);
   return text || fallback;
+}
+
+function personName(value, role) {
+  const fallback = role === "me" ? "Youyou" : "Gepo";
+  const text = clipName(value, fallback);
+  if (role === "me" && text === "Me") return "Youyou";
+  if (role === "partner" && text === "Wife") return "Gepo";
+  return text;
+}
+
+function adoptNames(raw) {
+  const me = personName(raw?.me, "me");
+  const partner = personName(raw?.partner, "partner");
+  const previousMe = String(raw?.me || "").trim();
+  const previousPartner = String(raw?.partner || "").trim();
+  const renamed = previousMe === "Me" || previousPartner === "Wife";
+  return {
+    me,
+    partner,
+    baby: clipName(raw?.baby, "Baby"),
+    updatedAt: renamed ? Date.now() : (Number(raw?.updatedAt) || 0)
+  };
 }
 
 function normalize(event) {
@@ -192,8 +209,8 @@ function absorb(doc) {
   const localNamesAt = Number(state.names.updatedAt) || 0;
   if (doc.names && remoteNamesAt > localNamesAt) {
     state.names = {
-      me: clipName(doc.names.me, "Me"),
-      partner: clipName(doc.names.partner, "Wife"),
+      me: personName(doc.names.me, "me"),
+      partner: personName(doc.names.partner, "partner"),
       baby: clipName(doc.names.baby, "Baby"),
       updatedAt: remoteNamesAt
     };
@@ -232,8 +249,8 @@ function todayIso() {
 }
 
 function whoLabel(who) {
-  if (who === "me") return state.names.me || "Me";
-  if (who === "partner") return state.names.partner || "Wife";
+  if (who === "me") return state.names.me || "Youyou";
+  if (who === "partner") return state.names.partner || "Gepo";
   if (who === "baby") return state.names.baby || "Baby";
   return "Both";
 }
@@ -278,8 +295,8 @@ function render() {
 function renderFilters() {
   const items = [
     ["all", "All"],
-    ["me", state.names.me || "Me"],
-    ["partner", state.names.partner || "Wife"],
+    ["me", state.names.me || "Youyou"],
+    ["partner", state.names.partner || "Gepo"],
     ["baby", state.names.baby || "Baby"]
   ];
   $("filters").replaceChildren(...items.map(([id, label]) => {
@@ -378,7 +395,7 @@ function welcomeCard() {
   const card = document.createElement("div");
   card.className = "welcome";
   const text = document.createElement("p");
-  text.textContent = "Tap a shortcut — Doctor, Baby doctor, Delivery, Dentist, Travel — and that day gets a mark. Then share it so your wife sees the same agenda.";
+  text.textContent = "Tap a shortcut — Doctor, Baby doctor, Delivery, Dentist, Travel — and that day gets a mark. Then share it so Gepo sees the same agenda.";
   const button = document.createElement("button");
   button.type = "button";
   button.textContent = "Got it";
@@ -762,7 +779,7 @@ async function sendLink() {
     const url = await makeLink();
     if (navigator.share) {
       try {
-        await navigator.share({ title: "Our agenda", text: "Open this on your iPhone so we see the same plans.", url });
+        await navigator.share({ title: "Our agenda", text: "Open this on your iPhone so Youyou and Gepo see the same plans.", url });
         return;
       } catch (error) {
         if (error && error.name === "AbortError") return;
@@ -779,11 +796,11 @@ async function sendLink() {
 async function copyText(url) {
   try {
     await navigator.clipboard.writeText(url);
-    showToast("Link copied. Send it to your wife.");
+    showToast("Link copied. Send it to Gepo.");
   } catch {
     $("linkField").focus();
     $("linkField").select();
-    showToast("Copy the link, then send it to your wife.");
+    showToast("Copy the link, then send it to Gepo.");
   }
 }
 
@@ -797,15 +814,15 @@ function openShare() {
     $("shareNote").textContent = "Open this page with the https link so both iPhones can share.";
   } else if (location.hostname === "localhost" || location.hostname === "127.0.0.1") {
     $("shareNote").hidden = false;
-    $("shareNote").textContent = "On both iPhones, open https://youwest54.github.io/calendar/ then tap Share and send that link.";
+    $("shareNote").textContent = "On both iPhones, open https://youwest54.github.io/calendar/ then tap Share and send that link to Gepo.";
   }
   openSheet($("shareSheet"));
 }
 
 function saveNames() {
   state.names = {
-    me: clipName($("yourName").value, "Me"),
-    partner: clipName($("partnerName").value, "Wife"),
+    me: personName($("yourName").value, "me"),
+    partner: personName($("partnerName").value, "partner"),
     baby: clipName($("babyName").value, "Baby"),
     updatedAt: Date.now()
   };

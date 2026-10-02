@@ -1,4 +1,4 @@
-const CACHE = "agenda-v3";
+const CACHE = "agenda-v4";
 const FILES = [
   "./",
   "./index.html",
