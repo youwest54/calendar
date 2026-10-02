@@ -180,6 +180,7 @@ function normalize(event) {
     category,
     who,
     note: String(event.note || "").slice(0, 500),
+    urgent: !!event.urgent,
     updatedAt: Number(event.updatedAt) || 0,
     deleted: !!event.deleted
   };
@@ -187,7 +188,7 @@ function normalize(event) {
 
 function eventSig(list) {
   return list
-    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.date, event.time, event.title, event.category, event.who, event.note].join("|"))
+    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.date, event.time, event.title, event.category, event.who, event.note].join("|"))
     .sort()
     .join("\n");
 }
@@ -276,7 +277,7 @@ function timeKey(event) {
 }
 
 function sortPlans(list) {
-  return [...list].sort((a, b) => timeKey(a) - timeKey(b) || a.title.localeCompare(b.title));
+  return [...list].sort((a, b) => Number(b.urgent) - Number(a.urgent) || timeKey(a) - timeKey(b) || a.title.localeCompare(b.title));
 }
 
 function plansOn(date) {
@@ -341,6 +342,7 @@ function renderGrid() {
     if (id === view.selected) button.classList.add("selected");
     if (id < today) button.classList.add("past");
     if (events.length) button.classList.add("has");
+    if (events.some((event) => event.urgent)) button.classList.add("urgent");
     const num = document.createElement("span");
     num.className = "num";
     num.textContent = String(date.getDate());
@@ -359,8 +361,9 @@ function renderGrid() {
     }
     button.append(num, dots);
     const names = events.slice(0, 3).map((event) => event.title).join(", ");
+    const urgentText = events.some((event) => event.urgent) ? ", urgent" : "";
     const planText = events.length
-      ? `, ${events.length} ${events.length === 1 ? "plan" : "plans"}: ${names}`
+      ? `${urgentText}, ${events.length} ${events.length === 1 ? "plan" : "plans"}: ${names}`
       : ", nothing planned";
     button.setAttribute("aria-label", `${fullFmt.format(date)}${planText}`);
     button.setAttribute("aria-pressed", id === view.selected ? "true" : "false");
@@ -394,7 +397,9 @@ function renderDay() {
   const more = document.createElement("button");
   more.type = "button";
   more.className = "more-day";
-  more.textContent = events.length === 1 ? `1 plan this day` : `${events.length} plans this day`;
+  if (events.some((event) => event.urgent)) more.classList.add("urgent");
+  const count = events.length === 1 ? "1 plan this day" : `${events.length} plans this day`;
+  more.textContent = events.some((event) => event.urgent) ? `Urgent · ${count}` : count;
   more.addEventListener("click", openDay);
   box.append(more);
 }
@@ -429,6 +434,12 @@ function eventButton(event) {
   const title = document.createElement("strong");
   title.className = "event-title";
   title.append(categoryMark(cat.id), document.createTextNode(event.title));
+  if (event.urgent) {
+    const badge = document.createElement("span");
+    badge.className = "urgent-badge";
+    badge.textContent = "Urgent";
+    title.append(badge);
+  }
   const meta = document.createElement("span");
   meta.className = "meta";
   meta.textContent = [event.time, whoLabel(event.who)].filter(Boolean).join(" · ");
@@ -444,11 +455,73 @@ function eventButton(event) {
   return button;
 }
 
+function planActions(event) {
+  const actions = document.createElement("div");
+  actions.className = "plan-actions";
+  const urgent = document.createElement("button");
+  urgent.type = "button";
+  urgent.className = "plan-act urgent-act";
+  urgent.textContent = event.urgent ? "Urgent" : "Make urgent";
+  urgent.setAttribute("aria-pressed", event.urgent ? "true" : "false");
+  urgent.addEventListener("click", () => toggleUrgent(event.id));
+  const remove = document.createElement("button");
+  remove.type = "button";
+  remove.className = "plan-act remove-act";
+  remove.textContent = "Remove";
+  remove.addEventListener("click", () => {
+    if (remove.dataset.armed !== "1") {
+      remove.dataset.armed = "1";
+      remove.textContent = "Sure?";
+      return;
+    }
+    removePlan(event.id);
+  });
+  actions.append(urgent, remove);
+  return actions;
+}
+
+function planRow(event, open) {
+  const row = document.createElement("div");
+  row.className = "plan-row";
+  if (event.urgent) row.classList.add("urgent");
+  const button = open;
+  row.append(button, planActions(event));
+  return row;
+}
+
+function toggleUrgent(id) {
+  const event = state.events.find((item) => item.id === id && !item.deleted);
+  if (!event) return;
+  event.urgent = !event.urgent;
+  event.updatedAt = Date.now();
+  commit();
+  if ($("daySheet").classList.contains("open")) fillDaySheet();
+}
+
+function removePlan(id) {
+  const event = state.events.find((item) => item.id === id && !item.deleted);
+  if (!event) return;
+  event.deleted = true;
+  event.updatedAt = Date.now();
+  commit();
+  if ($("daySheet").classList.contains("open")) fillDaySheet();
+  showToast("Removed", [{
+    label: "Undo",
+    onClick: () => {
+      event.deleted = false;
+      event.updatedAt = Date.now();
+      hideToast();
+      commit();
+      if ($("daySheet").classList.contains("open")) fillDaySheet();
+    }
+  }]);
+}
+
 function renderUpcoming() {
   const today = todayIso();
   const list = state.events
     .filter((event) => !event.deleted && passes(event) && event.date >= today)
-    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : timeKey(a) - timeKey(b)));
+    .sort((a, b) => Number(b.urgent) - Number(a.urgent) || (a.date < b.date ? -1 : a.date > b.date ? 1 : timeKey(a) - timeKey(b)));
   $("comingCount").textContent = list.length ? String(list.length) : "";
   const box = $("upcoming");
   if (!list.length) {
@@ -470,7 +543,7 @@ function renderUpcoming() {
     when.textContent = dayFmt.format(parseISO(event.date));
     const detail = document.createElement("span");
     const dayName = dowFmt.format(parseISO(event.date));
-    detail.textContent = `${dayName}${event.time ? ` · ${event.time}` : ""} · ${event.title}`;
+    detail.textContent = `${event.urgent ? "Urgent · " : ""}${dayName}${event.time ? ` · ${event.time}` : ""} · ${event.title}`;
     text.append(when, detail);
     button.append(categoryMark(cat.id), text);
     button.addEventListener("click", () => {
@@ -482,7 +555,7 @@ function renderUpcoming() {
       render();
       openDay();
     });
-    return button;
+    return planRow(event, button);
   }));
 }
 
@@ -579,7 +652,7 @@ function fillDaySheet() {
     box.append(empty);
     return;
   }
-  for (const event of events) box.append(eventButton(event));
+  for (const event of events) box.append(planRow(event, eventButton(event)));
 }
 
 function openDay() {
@@ -636,6 +709,7 @@ function openEditor(event) {
       category: "",
       who: "both",
       note: "",
+      urgent: false,
       titleTouched: false
     };
   typePage = 0;
@@ -744,6 +818,7 @@ function saveDraft(event) {
     category: chosen ? chosen.id : "reminder",
     who: draft.who || "both",
     note: $("noteInput").value.trim().slice(0, 500),
+    urgent: !!draft.urgent,
     updatedAt: Date.now(),
     deleted: false
   };
