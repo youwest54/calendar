@@ -822,6 +822,7 @@ function saveDraft(event) {
     updatedAt: Date.now(),
     deleted: false
   };
+  const editing = !!draft.id;
   const index = state.events.findIndex((item) => item.id === next.id);
   if (index >= 0) state.events[index] = next;
   else state.events.push(next);
@@ -832,7 +833,8 @@ function saveDraft(event) {
   returnToDay = false;
   closeSheets();
   commit();
-  openDay();
+  if (editing) openDay();
+  else openEditor(null);
 }
 
 function deleteDraft() {
