@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=30">
+  <link rel="stylesheet" href="css/app.css?v=31">
 </head>
 <body>
   <main class="app">
@@ -249,11 +249,9 @@
     </label>
     <p class="hint">The same reminders go to both of you. The first email in each inbox asks you to confirm — tap it once.</p>
     <button type="button" id="sendTest" class="save">Send a test</button>
-    <p class="group">iPhone and Google</p>
-    <p class="hint">Bring in a calendar file from the iPhone Calendar app or from Google Calendar. On a plan, To iPhone and To Google send it back.</p>
-    <button type="button" id="importBtn" class="save">Bring in a file</button>
-    <button type="button" id="exportBtn" class="copy wide">Send all to iPhone</button>
-    <input id="importFile" type="file" accept=".ics,text/calendar,text/plain" hidden>
+    <p class="group">Google Calendar</p>
+    <p class="hint">Syncs both ways. On the iPhone, add this same Google account in Settings, Calendar, Accounts. The iPhone calendar then shows the same plans.</p>
+    <button type="button" id="googleSync" class="save">Sync Google Calendar</button>
     <p class="group">On iPhone</p>
     <ol class="steps">
       <li>Open this page in Safari.</li>
@@ -264,6 +262,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=33"></script>
+  <script type="module" src="js/app.js?v=34"></script>
 </body>
 </html>

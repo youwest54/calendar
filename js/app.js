@@ -1,6 +1,7 @@
 import { categoryMark } from "./icons.js?v=28";
 import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
-import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY } from "./keys.js";
+import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY, GOOGLE_CLIENT_ID } from "./keys.js";
+import { loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=34";
 
 const STORAGE_KEY = "our-agenda-v1";
 
@@ -244,13 +245,15 @@ function normalize(event) {
     urgent: !!event.urgent,
     urgentAt: event.urgent ? (Number(event.urgentAt) || Number(event.updatedAt) || 0) : 0,
     updatedAt: Number(event.updatedAt) || 0,
+    gcalId: String(event.gcalId || "").slice(0, 120),
+    gcalAt: Number(event.gcalAt) || 0,
     deleted: !!event.deleted
   };
 }
 
 function eventSig(list) {
   return list
-    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.urgentAt || 0, event.noticeAt || 0, (event.notices || []).join(","), event.date, event.end || "", event.time, event.title, event.category, event.who, event.note, event.color].join("|"))
+    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.urgentAt || 0, event.noticeAt || 0, (event.notices || []).join(","), event.date, event.end || "", event.time, event.title, event.category, event.who, event.note, event.color, event.gcalId || "", event.gcalAt || 0].join("|"))
     .sort()
     .join("\n");
 }
@@ -1488,6 +1491,8 @@ function saveDraft(event) {
     noticeAt: notices.length ? (sameNotices ? (Number(previous.noticeAt) || Date.now()) : Date.now()) : 0,
     urgent: !!draft.urgent,
     urgentAt: draft.urgent ? (Number(draft.urgentAt) || Date.now()) : 0,
+    gcalId: previous?.gcalId || "",
+    gcalAt: previous?.gcalAt || 0,
     updatedAt: Date.now(),
     deleted: false
   };
@@ -1761,6 +1766,46 @@ function saveEmail(options = {}) {
   if (who.length) showToast(`Saved. Reminders will also come to ${who.join(" and ")}. Confirm the first email.`);
 }
 
+async function syncGoogleNow() {
+  const button = $("googleSync");
+  if (!GOOGLE_CLIENT_ID) {
+    showToast("Google sign-in is not ready yet.");
+    return;
+  }
+  if (button.disabled) return;
+  if (!window.google?.accounts?.oauth2) {
+    try {
+      await loadGoogleScript();
+    } catch {
+      showToast("Google did not open. Tap again.");
+      return;
+    }
+  }
+  button.disabled = true;
+  showToast("Opening Google…");
+  try {
+    const token = await requestGoogleToken(GOOGLE_CLIENT_ID);
+    showToast("Syncing…");
+    const result = await syncGoogle(token, state.events);
+    state.events = result.events.map(normalize).filter(Boolean);
+    commit();
+    const parts = [];
+    if (result.added) parts.push(result.added === 1 ? "1 plan brought in" : `${result.added} plans brought in`);
+    if (result.pushed) parts.push(result.pushed === 1 ? "1 plan sent to Google" : `${result.pushed} plans sent to Google`);
+    if (result.changed) parts.push(result.changed === 1 ? "1 plan updated" : `${result.changed} plans updated`);
+    showToast(parts.length ? `Google synced. ${parts.join(". ")}.` : "Google is up to date.");
+  } catch (err) {
+    const message = String(err && err.message || "");
+    if (message === "access_denied" || message === "popup_closed" || message === "popup_failed_to_open") {
+      showToast("Google was closed. Tap Sync Google Calendar again.");
+    } else {
+      showToast("Google did not sync. Tap again.");
+    }
+  } finally {
+    button.disabled = false;
+  }
+}
+
 function sendTest() {
   saveEmail({ quiet: true });
   const emails = reminderEmails();
@@ -1902,9 +1947,7 @@ function bind() {
   $("yourEmail").addEventListener("change", () => saveEmail());
   $("wifeEmail").addEventListener("change", () => saveEmail());
   $("sendTest").addEventListener("click", sendTest);
-  $("importBtn").addEventListener("click", () => $("importFile").click());
-  $("importFile").addEventListener("change", onImportFile);
-  $("exportBtn").addEventListener("click", () => { void exportAll(); });
+  $("googleSync").addEventListener("click", () => { void syncGoogleNow(); });
   $("titleInput").addEventListener("input", () => {
     draft.titleTouched = true;
     draft.title = $("titleInput").value;
@@ -2002,6 +2045,7 @@ async function boot() {
   if ("serviceWorker" in navigator && window.isSecureContext) {
     navigator.serviceWorker.register("./sw.js").then(() => enableAlerts()).catch(() => {});
   }
+  void loadGoogleScript().catch(() => {});
 }
 
 void boot();
