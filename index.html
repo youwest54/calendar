@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=27">
+  <link rel="stylesheet" href="css/app.css?v=28">
 </head>
 <body>
   <main class="app">
@@ -240,10 +240,14 @@
     </label>
     <p class="group">Email reminders</p>
     <label class="field">
-      <span>Email</span>
-      <input id="reminderEmail" type="email" inputmode="email" autocomplete="email" maxlength="80" placeholder="name@email.com" enterkeyhint="done">
+      <span id="yourEmailLabel">Youyou</span>
+      <input id="yourEmail" type="email" inputmode="email" autocomplete="email" maxlength="80" placeholder="youyou@email.com" enterkeyhint="done">
     </label>
-    <p class="hint">The same reminders also come to this inbox. The first email asks you to confirm — tap it once. The other phone can use a different email.</p>
+    <label class="field">
+      <span id="wifeEmailLabel">Gepo</span>
+      <input id="wifeEmail" type="email" inputmode="email" autocomplete="email" maxlength="80" placeholder="gepo@email.com" enterkeyhint="done">
+    </label>
+    <p class="hint">The same reminders go to both of you. The first email in each inbox asks you to confirm — tap it once.</p>
     <p class="group">On iPhone</p>
     <ol class="steps">
       <li>Open this page in Safari.</li>
@@ -254,6 +258,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=29"></script>
+  <script type="module" src="js/app.js?v=30"></script>
 </body>
 </html>

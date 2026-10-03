@@ -121,6 +121,17 @@ async function sendMail(email, subject, text) {
   }
 }
 
+function deviceEmails(device) {
+  const found = [];
+  const add = (value) => {
+    const email = cleanEmail(value);
+    if (email && !found.includes(email)) found.push(email);
+  };
+  if (Array.isArray(device.emails)) device.emails.forEach(add);
+  add(device.email);
+  return found.slice(0, 2);
+}
+
 const { client, messages } = await listen(6000);
 let sent = { kind: "sent", items: [] };
 const devices = [];
@@ -139,8 +150,8 @@ let mailCount = 0;
 let mailFail = 0;
 for (const device of devices) {
   const endpoint = typeof device.subscription?.endpoint === "string" ? device.subscription.endpoint : "";
-  const email = cleanEmail(device.email);
-  if (!endpoint && !email) continue;
+  const emails = deviceEmails(device);
+  if (!endpoint && !emails.length) continue;
   for (const job of device.jobs.slice(0, 100)) {
     if (!job || typeof job.tag !== "string" || typeof job.at !== "string") continue;
     const at = Date.parse(job.at);
@@ -166,19 +177,18 @@ for (const device of devices) {
         }
       }
     }
-    if (email) {
+    for (const email of emails) {
       const key = `mail:${email}|${job.tag}`;
-      if (!seen.has(key)) {
-        seen.add(key);
-        try {
-          await sendMail(email, `Family Calendar: ${title}`, `${body}\n\nhttps://youwest54.github.io/calendar/`);
-          sent.items.push({ tag: job.tag, at: job.at, endpoint: `mail:${email}` });
-          mailCount += 1;
-        } catch (err) {
-          seen.delete(key);
-          mailFail += 1;
-          console.log("mail", err.statusCode || "fail");
-        }
+      if (seen.has(key)) continue;
+      seen.add(key);
+      try {
+        await sendMail(email, `Family Calendar: ${title}`, `${body}\n\nhttps://youwest54.github.io/calendar/`);
+        sent.items.push({ tag: job.tag, at: job.at, endpoint: `mail:${email}` });
+        mailCount += 1;
+      } catch (err) {
+        seen.delete(key);
+        mailFail += 1;
+        console.log("mail", err.statusCode || "fail");
       }
     }
   }

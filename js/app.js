@@ -71,7 +71,7 @@ const sync = createSync({
   getDoc: currentDoc,
   onRemote: absorb,
   onReady: () => {
-    if (state.events.length || state.names.updatedAt) sync.publish();
+    if (state.events.length || state.names.updatedAt || state.emails.updatedAt) sync.publish();
   },
   onStatus: setStatus
 });
@@ -122,7 +122,7 @@ function blankState() {
     code: null,
     deviceId: null,
     names: { me: "Youyou", partner: "Gepo", baby: "Baby", updatedAt: 0 },
-    email: "",
+    emails: { me: "", partner: "", updatedAt: 0 },
     events: [],
     dismissedWelcome: false
   };
@@ -142,7 +142,7 @@ function loadState() {
       code: cleanFamilyCode(raw.code).length === 8 ? cleanFamilyCode(raw.code) : null,
       deviceId: raw.deviceId || randomSecret(8),
       names: adoptNames(raw.names),
-      email: cleanEmail(raw.email),
+      emails: adoptEmails(raw.emails, raw.email),
       events: Array.isArray(raw.events) ? raw.events.map(normalize).filter(Boolean) : [],
       dismissedWelcome: !!raw.dismissedWelcome
     };
@@ -159,7 +159,7 @@ function saveState() {
     code: state.code,
     deviceId: state.deviceId,
     names: state.names,
-    email: state.email || "",
+    emails: state.emails,
     events: state.events,
     dismissedWelcome: state.dismissedWelcome
   }));
@@ -169,6 +169,7 @@ function currentDoc() {
   return {
     v: 1,
     names: { ...state.names },
+    emails: { ...state.emails },
     events: state.events
       .map((event) => ({ ...event }))
       .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))
@@ -193,6 +194,20 @@ function personName(value, role) {
   if (role === "me" && text === "Me") return "Youyou";
   if (role === "partner" && text === "Wife") return "Gepo";
   return text;
+}
+
+function adoptEmails(raw, legacy) {
+  const me = cleanEmail(raw?.me) || cleanEmail(legacy);
+  const partner = cleanEmail(raw?.partner);
+  return {
+    me,
+    partner,
+    updatedAt: Number(raw?.updatedAt) || (cleanEmail(legacy) && !raw ? 1 : 0)
+  };
+}
+
+function reminderEmails() {
+  return [...new Set([state.emails?.me, state.emails?.partner].map(cleanEmail).filter(Boolean))];
 }
 
 function adoptNames(raw) {
@@ -268,7 +283,10 @@ function absorb(doc) {
       updatedAt: remoteNamesAt
     };
   }
-  const changed = eventSig(merged) !== eventSig(remoteEvents) || localNamesAt > remoteNamesAt;
+  const remoteMailAt = Number(doc.emails?.updatedAt) || 0;
+  const localMailAt = Number(state.emails?.updatedAt) || 0;
+  if (doc.emails && remoteMailAt > localMailAt) state.emails = adoptEmails(doc.emails);
+  const changed = eventSig(merged) !== eventSig(remoteEvents) || localNamesAt > remoteNamesAt || localMailAt > remoteMailAt;
   state.events = merged;
   saveState();
   render();
@@ -349,6 +367,7 @@ function render() {
   renderDay();
   renderUpcoming();
   if ($("daySheet").classList.contains("open")) fillDaySheet();
+  paintEmailLabels();
   setStatus(statusMode);
 }
 
@@ -708,9 +727,9 @@ let alertTimer = 0;
 
 function scheduleAlerts() {
   if (!window.isSecureContext) return;
-  const email = cleanEmail(state.email);
+  const emails = reminderEmails();
   const allowed = "Notification" in window && Notification.permission === "granted";
-  if (!email && !allowed) return;
+  if (!emails.length && !allowed) return;
   clearTimeout(alertTimer);
   alertTimer = setTimeout(() => { void enableAlerts(); }, 1200);
 }
@@ -744,12 +763,13 @@ async function enableAlerts() {
           subscription = null;
         }
       }
-      const email = cleanEmail(state.email);
-      if (!subscription && !email) return false;
+      const emails = reminderEmails();
+      if (!subscription && !emails.length) return false;
       const message = await encryptForServer({
         kind: "device",
         subscription,
-        email,
+        emails,
+        email: emails[0] || "",
         jobs: collectJobs()
       });
       await publishOnce(`ag/push/${state.deviceId}`, message);
@@ -1415,7 +1435,7 @@ async function startFamily() {
     state.key = room.key;
     saveState();
     await sync.start(state.roomId, state.key);
-    if (state.events.length || state.names.updatedAt) sync.publish();
+    if (state.events.length || state.names.updatedAt || state.emails.updatedAt) sync.publish();
     paintShare();
     showToast("Tell Gepo this code.");
   } catch {
@@ -1435,11 +1455,23 @@ async function copyCode() {
   }
 }
 
+function paintEmailLabels() {
+  const yours = $("yourEmailLabel");
+  const wife = $("wifeEmailLabel");
+  if (!yours || !wife) return;
+  yours.textContent = state.names.me || "Youyou";
+  wife.textContent = state.names.partner || "Gepo";
+  const yourInput = $("yourEmail");
+  const wifeInput = $("wifeEmail");
+  if (document.activeElement !== yourInput) yourInput.value = state.emails?.me || "";
+  if (document.activeElement !== wifeInput) wifeInput.value = state.emails?.partner || "";
+}
+
 function openShare() {
   $("yourName").value = state.names.me;
   $("partnerName").value = state.names.partner;
   $("babyName").value = state.names.baby;
-  $("reminderEmail").value = state.email || "";
+  paintEmailLabels();
   showShareWarning();
   paintShare();
   openSheet($("shareSheet"));
@@ -1459,18 +1491,21 @@ function saveNames() {
 }
 
 function saveEmail() {
-  const typed = $("reminderEmail").value.trim();
-  const email = cleanEmail(typed);
-  if (typed && !email) {
+  const yoursTyped = $("yourEmail").value.trim();
+  const wifeTyped = $("wifeEmail").value.trim();
+  const yours = cleanEmail(yoursTyped);
+  const wife = cleanEmail(wifeTyped);
+  if ((yoursTyped && !yours) || (wifeTyped && !wife)) {
     showToast("That email does not look right.");
     return;
   }
-  $("reminderEmail").value = email;
-  if (email === (state.email || "")) return;
-  state.email = email;
-  saveState();
-  scheduleAlerts();
-  if (email) showToast("Reminders will also come to that inbox. Confirm the first email.");
+  $("yourEmail").value = yours;
+  $("wifeEmail").value = wife;
+  if (yours === (state.emails.me || "") && wife === (state.emails.partner || "")) return;
+  state.emails = { me: yours, partner: wife, updatedAt: Date.now() };
+  commit();
+  const who = [yours && (state.names.me || "Youyou"), wife && (state.names.partner || "Gepo")].filter(Boolean);
+  if (who.length) showToast(`Reminders will also come to ${who.join(" and ")}. Confirm the first email.`);
 }
 
 async function joinFromInput() {
@@ -1536,7 +1571,8 @@ function bind() {
   for (const id of ["yourName", "partnerName", "babyName"]) {
     $(id).addEventListener("change", saveNames);
   }
-  $("reminderEmail").addEventListener("change", saveEmail);
+  $("yourEmail").addEventListener("change", saveEmail);
+  $("wifeEmail").addEventListener("change", saveEmail);
   $("titleInput").addEventListener("input", () => {
     draft.titleTouched = true;
     draft.title = $("titleInput").value;
