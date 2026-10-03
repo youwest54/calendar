@@ -576,8 +576,255 @@ function planActions(event) {
     }
     removePlan(event.id);
   });
-  actions.append(edit, color, urgent, remove);
+  const phone = phoneAction(event);
+  const google = googleAction(event);
+  actions.append(edit, color, urgent, remove, phone, google);
   return actions;
+}
+
+function phoneAction(event) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "plan-act";
+  button.textContent = "To iPhone";
+  button.addEventListener("click", () => { void addToPhone(event); });
+  return button;
+}
+
+function googleAction(event) {
+  const button = document.createElement("button");
+  button.type = "button";
+  button.className = "plan-act";
+  button.textContent = "To Google";
+  button.addEventListener("click", () => addToGoogle(event));
+  return button;
+}
+
+function icsEscape(text) {
+  return String(text || "").replace(/\\/g, "\\\\").replace(/\n/g, "\\n").replace(/,/g, "\\,").replace(/;/g, "\\;");
+}
+
+function icsUnescape(text) {
+  return String(text || "").replace(/\\n/gi, "\n").replace(/\\,/g, ",").replace(/\\;/g, ";").replace(/\\\\/g, "\\");
+}
+
+function foldIcs(line) {
+  const out = [];
+  let rest = line;
+  while (rest.length > 73) {
+    out.push(rest.slice(0, 73));
+    rest = ` ${rest.slice(73)}`;
+  }
+  out.push(rest);
+  return out.join("\r\n");
+}
+
+function stampUtc(date) {
+  const pad = (value) => String(value).padStart(2, "0");
+  return `${date.getUTCFullYear()}${pad(date.getUTCMonth() + 1)}${pad(date.getUTCDate())}T${pad(date.getUTCHours())}${pad(date.getUTCMinutes())}${pad(date.getUTCSeconds())}Z`;
+}
+
+function shiftIso(value, days) {
+  const date = parseISO(value);
+  date.setDate(date.getDate() + days);
+  return iso(date);
+}
+
+function plusHour(date, time) {
+  const [hour, minute] = time.split(":").map(Number);
+  const when = parseISO(date);
+  when.setHours(hour || 0, minute || 0, 0, 0);
+  when.setHours(when.getHours() + 1);
+  const pad = (value) => String(value).padStart(2, "0");
+  return { date: iso(when), time: `${pad(when.getHours())}:${pad(when.getMinutes())}` };
+}
+
+function eventSpan(event) {
+  const finish = eventEnd(event);
+  if (event.time) {
+    const end = plusHour(finish, event.time);
+    return { allDay: false, start: event.date, startTime: event.time, end: end.date, endTime: end.time };
+  }
+  return { allDay: true, start: event.date, startTime: "", end: shiftIso(finish, 1), endTime: "" };
+}
+
+function compactWhen(date, time) {
+  return `${date.replace(/-/g, "")}T${time.replace(":", "")}00`;
+}
+
+function plansToIcs(events) {
+  const lines = [
+    "BEGIN:VCALENDAR",
+    "VERSION:2.0",
+    "PRODID:-//Family Calendar//EN",
+    "CALSCALE:GREGORIAN",
+    "METHOD:PUBLISH"
+  ];
+  const stamp = stampUtc(new Date());
+  for (const event of events) {
+    const span = eventSpan(event);
+    lines.push("BEGIN:VEVENT");
+    lines.push(`UID:${icsEscape(event.id)}@youwest54.github.io`);
+    lines.push(`DTSTAMP:${stamp}`);
+    if (span.allDay) {
+      lines.push(`DTSTART;VALUE=DATE:${span.start.replace(/-/g, "")}`);
+      lines.push(`DTEND;VALUE=DATE:${span.end.replace(/-/g, "")}`);
+    } else {
+      lines.push(`DTSTART:${compactWhen(span.start, span.startTime)}`);
+      lines.push(`DTEND:${compactWhen(span.end, span.endTime)}`);
+    }
+    lines.push(`SUMMARY:${icsEscape(event.title)}`);
+    if (event.note) lines.push(`DESCRIPTION:${icsEscape(event.note)}`);
+    lines.push("END:VEVENT");
+  }
+  lines.push("END:VCALENDAR");
+  return `${lines.map(foldIcs).join("\r\n")}\r\n`;
+}
+
+function addToGoogle(event) {
+  const span = eventSpan(event);
+  const dates = span.allDay
+    ? `${span.start.replace(/-/g, "")}/${span.end.replace(/-/g, "")}`
+    : `${compactWhen(span.start, span.startTime)}/${compactWhen(span.end, span.endTime)}`;
+  const url = `https://calendar.google.com/calendar/render?${new URLSearchParams({
+    action: "TEMPLATE",
+    text: event.title,
+    dates,
+    details: event.note || ""
+  })}`;
+  const opened = window.open(url, "_blank", "noopener");
+  if (!opened) location.assign(url);
+}
+
+async function shareIcs(filename, text) {
+  const file = new File([text], filename, { type: "text/calendar" });
+  if (navigator.canShare && navigator.canShare({ files: [file] })) {
+    try {
+      await navigator.share({ files: [file], title: filename });
+      return "shared";
+    } catch (err) {
+      if (err && err.name === "AbortError") return "cancel";
+    }
+  }
+  const url = URL.createObjectURL(file);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  document.body.append(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  return "saved";
+}
+
+async function addToPhone(event) {
+  const result = await shareIcs("plan.ics", plansToIcs([event]));
+  if (result !== "cancel") showToast("On the iPhone, tap Add to Calendar.");
+}
+
+async function exportAll() {
+  const today = todayIso();
+  const events = state.events.filter((event) => !event.deleted && eventEnd(event) >= today);
+  if (!events.length) {
+    showToast("No plans to send.");
+    return;
+  }
+  const result = await shareIcs("family-calendar.ics", plansToIcs(events));
+  if (result !== "cancel") showToast("On the iPhone, tap Add All. In Google Calendar, use Import.");
+}
+
+function unfoldIcs(text) {
+  return String(text || "").replace(/\r\n/g, "\n").replace(/\r/g, "\n").replace(/\n[ \t]/g, "");
+}
+
+function icsLine(block, name) {
+  const match = block.match(new RegExp(`^${name}(?:;[^:\\n]*)?:.*$`, "m"));
+  return match ? match[0] : "";
+}
+
+function icsValue(block, name) {
+  const line = icsLine(block, name);
+  const index = line.indexOf(":");
+  return index >= 0 ? line.slice(index + 1).trim() : "";
+}
+
+function parseIcsDate(line) {
+  if (!line) return null;
+  const raw = line.slice(line.indexOf(":") + 1).trim();
+  const match = raw.match(/^(\d{4})(\d{2})(\d{2})(?:T(\d{2})(\d{2}))?/);
+  if (!match) return null;
+  const [, year, month, day, hour, minute] = match;
+  const allDay = /VALUE=DATE/i.test(line) || hour == null;
+  if (allDay) return { date: `${year}-${month}-${day}`, time: "", allDay: true };
+  if (raw.endsWith("Z")) {
+    const when = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
+    const pad = (value) => String(value).padStart(2, "0");
+    return { date: iso(when), time: `${pad(when.getHours())}:${pad(when.getMinutes())}`, allDay: false };
+  }
+  return { date: `${year}-${month}-${day}`, time: `${hour}:${minute}`, allDay: false };
+}
+
+function safeUid(uid) {
+  const clean = String(uid || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 48);
+  return clean.length >= 6 ? clean : "";
+}
+
+function importIcs(text) {
+  if (!text || text.length > 500000 || !/BEGIN:VEVENT/.test(text)) {
+    showToast("That file has no plans.");
+    return;
+  }
+  const blocks = unfoldIcs(text).split("BEGIN:VEVENT").slice(1);
+  let added = 0;
+  for (const piece of blocks) {
+    const block = piece.split("END:VEVENT")[0];
+    if (/^STATUS(?:;[^:\n]*)?:CANCELLED/m.test(block)) continue;
+    const start = parseIcsDate(icsLine(block, "DTSTART"));
+    if (!start || !/^\d{4}-\d{2}-\d{2}$/.test(start.date)) continue;
+    const finish = parseIcsDate(icsLine(block, "DTEND"));
+    let end = "";
+    if (finish && finish.date > start.date) {
+      end = finish.allDay ? shiftIso(finish.date, -1) : finish.date;
+      if (end <= start.date) end = "";
+    }
+    const id = safeUid(icsValue(block, "UID")) || (crypto.randomUUID ? crypto.randomUUID() : randomSecret(12));
+    if (state.events.some((event) => event.id === id)) continue;
+    state.events.push({
+      id,
+      date: start.date,
+      end,
+      time: start.time,
+      title: icsUnescape(icsValue(block, "SUMMARY")).slice(0, 80) || "Plan",
+      category: "reminder",
+      who: "both",
+      note: icsUnescape(icsValue(block, "DESCRIPTION")).slice(0, 500),
+      color: "",
+      notices: [],
+      noticeAt: 0,
+      urgent: false,
+      urgentAt: 0,
+      updatedAt: Date.now(),
+      deleted: false
+    });
+    added += 1;
+    if (added >= 200) break;
+  }
+  if (!added) {
+    showToast("No new plans in that file.");
+    return;
+  }
+  commit();
+  showToast(added === 1 ? "Brought in 1 plan." : `Brought in ${added} plans.`);
+}
+
+function onImportFile() {
+  const input = $("importFile");
+  const file = input.files && input.files[0];
+  input.value = "";
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => importIcs(String(reader.result || ""));
+  reader.readAsText(file);
 }
 
 function openColorPicker(event) {
@@ -1655,6 +1902,9 @@ function bind() {
   $("yourEmail").addEventListener("change", () => saveEmail());
   $("wifeEmail").addEventListener("change", () => saveEmail());
   $("sendTest").addEventListener("click", sendTest);
+  $("importBtn").addEventListener("click", () => $("importFile").click());
+  $("importFile").addEventListener("change", onImportFile);
+  $("exportBtn").addEventListener("click", () => { void exportAll(); });
   $("titleInput").addEventListener("input", () => {
     draft.titleTouched = true;
     draft.title = $("titleInput").value;

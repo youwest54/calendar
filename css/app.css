@@ -1012,7 +1012,7 @@ textarea { resize: vertical; min-height: 84px; }
   padding-top: 8px;
 }
 
-#sendTest { margin-top: 8px; }
+#sendTest, #importBtn, #exportBtn { margin-top: 8px; }
 
 .save, .copy.wide {
   width: 100%;
