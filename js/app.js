@@ -1514,6 +1514,79 @@ function saveEmail(options = {}) {
   if (who.length) showToast(`Saved. Reminders will also come to ${who.join(" and ")}. Confirm the first email.`);
 }
 
+function sendTest() {
+  saveEmail({ quiet: true });
+  const emails = reminderEmails();
+  if ("Notification" in window && Notification.permission === "default") {
+    void Notification.requestPermission().then((result) => {
+      if (result === "granted") void showTestNotice();
+    });
+  } else if ("Notification" in window && Notification.permission === "granted") {
+    void showTestNotice();
+  }
+  if (!emails.length) {
+    showToast("Type an email first, then tap Send a test.");
+    return;
+  }
+  void deliverTestMail(emails);
+}
+
+async function showTestNotice() {
+  const note = { body: "This is a test reminder.", tag: "calendar-test" };
+  try {
+    if ("serviceWorker" in navigator) {
+      const reg = await Promise.race([
+        navigator.serviceWorker.ready,
+        new Promise((resolve) => setTimeout(() => resolve(null), 2500))
+      ]);
+      if (reg) {
+        await reg.showNotification("Family Calendar", note);
+        return;
+      }
+    }
+  } catch {
+    /* try the page notice */
+  }
+  try {
+    new Notification("Family Calendar", note);
+  } catch {
+    /* the phone did not allow notices */
+  }
+}
+
+async function deliverTestMail(emails) {
+  const button = $("sendTest");
+  button.disabled = true;
+  let failed = 0;
+  for (const email of emails) {
+    try {
+      const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(email)}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
+        body: JSON.stringify({
+          name: "Family Calendar",
+          _subject: "Family Calendar test",
+          _captcha: "false",
+          _template: "box",
+          message: "This is a test. Plan reminders will come to this inbox.\n\nhttps://youwest54.github.io/calendar/"
+        })
+      });
+      if (!res.ok) failed += 1;
+    } catch {
+      failed += 1;
+    }
+  }
+  button.disabled = false;
+  if (failed === emails.length) {
+    showToast("The test email did not send. Try again.");
+    return;
+  }
+  const phone = "Notification" in window && Notification.permission === "granted"
+    ? "Check the phone notice and both inboxes."
+    : "Check both inboxes. Tap Allow if the phone asks.";
+  showToast(`Test sent. ${phone} If this is the first email, tap confirm.`);
+}
+
 async function joinFromInput() {
   if (!showShareWarning()) return;
   const code = cleanFamilyCode($("joinCode").value);
@@ -1581,6 +1654,7 @@ function bind() {
   $("wifeEmail").addEventListener("input", () => saveEmail({ quiet: true }));
   $("yourEmail").addEventListener("change", () => saveEmail());
   $("wifeEmail").addEventListener("change", () => saveEmail());
+  $("sendTest").addEventListener("click", sendTest);
   $("titleInput").addEventListener("input", () => {
     draft.titleTouched = true;
     draft.title = $("titleInput").value;
