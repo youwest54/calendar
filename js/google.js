@@ -1,5 +1,6 @@
 const SCOPE = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
-const GOOGLE_COLOR = "#3c6fba";
+export const GOOGLE_IMPORT_COLOR = "#3c6fba";
+const OLD_IMPORT_COLOR = "#8d7b6a";
 
 let tokenClient = null;
 let pending = null;
@@ -212,9 +213,12 @@ function planKey(date, time, title) {
 
 function importedColor(remote) {
   const extra = remote.extendedProperties?.private || {};
-  if (/^#[0-9a-f]{6}$/i.test(extra.color || "")) return extra.color.toLowerCase();
-  if (extra.familyId) return "";
-  return GOOGLE_COLOR;
+  if (/^#[0-9a-f]{6}$/i.test(extra.color || "")) {
+    const color = extra.color.toLowerCase();
+    if (color !== OLD_IMPORT_COLOR) return color;
+  }
+  if (extra.familyId && !String(extra.familyId).startsWith("g")) return "";
+  return GOOGLE_IMPORT_COLOR;
 }
 
 function fromRemote(remote) {
@@ -273,7 +277,6 @@ function fromRemote(remote) {
 function applyRemote(event, remote) {
   const incoming = fromRemote(remote);
   if (!incoming) return;
-  const extra = remote.extendedProperties?.private || {};
   event.date = incoming.date;
   event.end = incoming.end;
   event.time = incoming.time;
@@ -281,9 +284,9 @@ function applyRemote(event, remote) {
   event.note = incoming.note;
   if (incoming.category) event.category = incoming.category;
   if (incoming.who) event.who = incoming.who;
-  const explicit = /^#[0-9a-f]{6}$/i.test(extra.color || "") ? extra.color.toLowerCase() : "";
-  if (explicit) event.color = explicit;
-  else if (!event.color && !extra.familyId) event.color = GOOGLE_COLOR;
+  const chosen = importedColor(remote);
+  if (chosen && chosen !== GOOGLE_IMPORT_COLOR) event.color = chosen;
+  else if (chosen && (!event.color || event.color === OLD_IMPORT_COLOR)) event.color = chosen;
   event.gcalId = remote.id;
   event.gcalCal = remote.calendarId || event.gcalCal || "primary";
   event.updatedAt = Date.now();
@@ -445,8 +448,10 @@ export async function syncGoogle(token, events) {
 
   const stamped = Date.now();
   for (const event of next) {
-    if (event.deleted || event.color || !String(event.id || "").startsWith("g")) continue;
-    event.color = GOOGLE_COLOR;
+    if (event.deleted || !String(event.id || "").startsWith("g")) continue;
+    if (event.color === GOOGLE_IMPORT_COLOR) continue;
+    if (event.color && event.color !== OLD_IMPORT_COLOR) continue;
+    event.color = GOOGLE_IMPORT_COLOR;
     event.updatedAt = stamped;
     event.gcalAt = stamped;
     changed += 1;

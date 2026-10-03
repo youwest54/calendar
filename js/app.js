@@ -1,7 +1,7 @@
 import { categoryMark } from "./icons.js?v=28";
 import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
 import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY, GOOGLE_CLIENT_ID } from "./keys.js";
-import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=39";
+import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle, GOOGLE_IMPORT_COLOR } from "./google.js?v=40";
 
 const STORAGE_KEY = "our-agenda-v1";
 
@@ -271,6 +271,29 @@ function mergeEvents(local, remote) {
   return [...map.values()];
 }
 
+const GOOGLE_BLUE_KEY = "our-agenda-google-blue";
+const OLD_IMPORT_COLOR = "#8d7b6a";
+
+function paintImportedBlue() {
+  let once = false;
+  try { once = localStorage.getItem(GOOGLE_BLUE_KEY) !== "1"; } catch { once = false; }
+  const now = Date.now();
+  let changed = false;
+  for (const event of state.events) {
+    if (event.deleted || !String(event.id || "").startsWith("g")) continue;
+    if (event.color === GOOGLE_IMPORT_COLOR) continue;
+    if (!once && event.color && event.color !== OLD_IMPORT_COLOR) continue;
+    event.color = GOOGLE_IMPORT_COLOR;
+    event.updatedAt = now;
+    event.gcalAt = now;
+    changed = true;
+  }
+  if (once) {
+    try { localStorage.setItem(GOOGLE_BLUE_KEY, "1"); } catch { /* ignore */ }
+  }
+  return changed;
+}
+
 function absorb(doc) {
   if (!doc || typeof doc !== "object") return;
   let remoteEvents = Array.isArray(doc.events) ? doc.events.map(normalize).filter(Boolean) : [];
@@ -278,6 +301,8 @@ function absorb(doc) {
     remoteEvents = remoteEvents.sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 1000);
   }
   const merged = mergeEvents(state.events, remoteEvents);
+  state.events = merged;
+  const colored = paintImportedBlue();
   const remoteNamesAt = Number(doc.names?.updatedAt) || 0;
   const localNamesAt = Number(state.names.updatedAt) || 0;
   if (doc.names && remoteNamesAt > localNamesAt) {
@@ -291,8 +316,7 @@ function absorb(doc) {
   const remoteMailAt = Number(doc.emails?.updatedAt) || 0;
   const localMailAt = Number(state.emails?.updatedAt) || 0;
   if (doc.emails && remoteMailAt > localMailAt) state.emails = adoptEmails(doc.emails);
-  const changed = eventSig(merged) !== eventSig(remoteEvents) || localNamesAt > remoteNamesAt || localMailAt > remoteMailAt;
-  state.events = merged;
+  const changed = colored || eventSig(state.events) !== eventSig(remoteEvents) || localNamesAt > remoteNamesAt || localMailAt > remoteMailAt;
   saveState();
   render();
   if (changed) sync.publish();
@@ -2118,7 +2142,8 @@ function claimLink() {
 async function boot() {
   claimLink();
   bind();
-  render();
+  if (paintImportedBlue()) commit({ skipGoogle: true });
+  else render();
   if (state.roomId && state.key && validKey(state.key)) {
     try {
       await sync.start(state.roomId, state.key);
