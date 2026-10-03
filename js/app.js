@@ -1311,6 +1311,7 @@ function requestClose() {
     return;
   }
   const sheetOpen = sheets().some((node) => node.classList.contains("open"));
+  if ($("shareSheet").classList.contains("open")) saveEmail();
   returnToDay = false;
   closeSheets();
   if (!sheetOpen) closeComing();
@@ -1490,22 +1491,27 @@ function saveNames() {
   commit();
 }
 
-function saveEmail() {
+function saveEmail(options = {}) {
   const yoursTyped = $("yourEmail").value.trim();
   const wifeTyped = $("wifeEmail").value.trim();
   const yours = cleanEmail(yoursTyped);
   const wife = cleanEmail(wifeTyped);
-  if ((yoursTyped && !yours) || (wifeTyped && !wife)) {
-    showToast("That email does not look right.");
-    return;
-  }
-  $("yourEmail").value = yours;
-  $("wifeEmail").value = wife;
-  if (yours === (state.emails.me || "") && wife === (state.emails.partner || "")) return;
-  state.emails = { me: yours, partner: wife, updatedAt: Date.now() };
-  commit();
-  const who = [yours && (state.names.me || "Youyou"), wife && (state.names.partner || "Gepo")].filter(Boolean);
-  if (who.length) showToast(`Reminders will also come to ${who.join(" and ")}. Confirm the first email.`);
+  const incomplete = (yoursTyped && !yours) || (wifeTyped && !wife);
+  if (incomplete && !options.quiet) showToast("That email does not look right.");
+  const next = {
+    me: yoursTyped && !yours ? (state.emails.me || "") : yours,
+    partner: wifeTyped && !wife ? (state.emails.partner || "") : wife,
+    updatedAt: state.emails.updatedAt || 0
+  };
+  if (next.me === (state.emails.me || "") && next.partner === (state.emails.partner || "")) return;
+  next.updatedAt = Date.now();
+  state.emails = next;
+  saveState();
+  scheduleAlerts();
+  sync.publish();
+  if (options.quiet) return;
+  const who = [next.me && (state.names.me || "Youyou"), next.partner && (state.names.partner || "Gepo")].filter(Boolean);
+  if (who.length) showToast(`Saved. Reminders will also come to ${who.join(" and ")}. Confirm the first email.`);
 }
 
 async function joinFromInput() {
@@ -1571,8 +1577,10 @@ function bind() {
   for (const id of ["yourName", "partnerName", "babyName"]) {
     $(id).addEventListener("change", saveNames);
   }
-  $("yourEmail").addEventListener("change", saveEmail);
-  $("wifeEmail").addEventListener("change", saveEmail);
+  $("yourEmail").addEventListener("input", () => saveEmail({ quiet: true }));
+  $("wifeEmail").addEventListener("input", () => saveEmail({ quiet: true }));
+  $("yourEmail").addEventListener("change", () => saveEmail());
+  $("wifeEmail").addEventListener("change", () => saveEmail());
   $("titleInput").addEventListener("input", () => {
     draft.titleTouched = true;
     draft.title = $("titleInput").value;
