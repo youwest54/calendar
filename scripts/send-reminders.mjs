@@ -97,6 +97,30 @@ function listen(ms) {
   });
 }
 
+function cleanEmail(value) {
+  const email = String(value || "").trim().toLowerCase().slice(0, 80);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
+}
+
+async function sendMail(email, subject, text) {
+  const res = await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(email)}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      name: "Family Calendar",
+      _subject: String(subject || "Family Calendar").slice(0, 120),
+      _captcha: "false",
+      _template: "box",
+      message: String(text || "").slice(0, 1000)
+    })
+  });
+  if (!res.ok) {
+    const err = new Error("mail");
+    err.statusCode = res.status;
+    throw err;
+  }
+}
+
 const { client, messages } = await listen(6000);
 let sent = { kind: "sent", items: [] };
 const devices = [];
@@ -104,35 +128,58 @@ for (const [topic, raw] of messages) {
   const data = decrypt(raw);
   if (!data || typeof data !== "object") continue;
   if (topic === "ag/push/sent" && data.kind === "sent" && Array.isArray(data.items)) sent = data;
-  else if (data.kind === "device" && data.subscription && Array.isArray(data.jobs)) devices.push(data);
+  else if (data.kind === "device" && Array.isArray(data.jobs)) devices.push(data);
 }
 
 const now = Date.now();
 const seen = new Set(sent.items.map((item) => `${item.endpoint}|${item.tag}`));
 let sentCount = 0;
 let failCount = 0;
+let mailCount = 0;
+let mailFail = 0;
 for (const device of devices) {
-  const endpoint = device.subscription?.endpoint;
-  if (typeof endpoint !== "string") continue;
+  const endpoint = typeof device.subscription?.endpoint === "string" ? device.subscription.endpoint : "";
+  const email = cleanEmail(device.email);
+  if (!endpoint && !email) continue;
   for (const job of device.jobs.slice(0, 100)) {
     if (!job || typeof job.tag !== "string" || typeof job.at !== "string") continue;
     const at = Date.parse(job.at);
     if (!Number.isFinite(at) || at > now || at < now - 48 * 60 * 60 * 1000) continue;
-    const key = `${endpoint}|${job.tag}`;
-    if (seen.has(key)) continue;
-    seen.add(key);
-    try {
-      await webpush.sendNotification(device.subscription, JSON.stringify({
-        title: String(job.title || "Family Calendar").slice(0, 80),
-        body: String(job.body || "An urgent plan is coming up.").slice(0, 180),
-        tag: job.tag.slice(0, 80)
-      }), { TTL: 60 * 60 * 24, urgency: "high" });
-      sent.items.push({ tag: job.tag, at: job.at, endpoint });
-      sentCount += 1;
-    } catch (err) {
-      seen.delete(key);
-      failCount += 1;
-      console.log("send", err.statusCode || "fail");
+    const title = String(job.title || "Family Calendar").slice(0, 80);
+    const body = String(job.body || "A plan is coming up.").slice(0, 180);
+    if (endpoint) {
+      const key = `${endpoint}|${job.tag}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        try {
+          await webpush.sendNotification(device.subscription, JSON.stringify({
+            title,
+            body,
+            tag: job.tag.slice(0, 80)
+          }), { TTL: 60 * 60 * 24, urgency: "high" });
+          sent.items.push({ tag: job.tag, at: job.at, endpoint });
+          sentCount += 1;
+        } catch (err) {
+          seen.delete(key);
+          failCount += 1;
+          console.log("send", err.statusCode || "fail");
+        }
+      }
+    }
+    if (email) {
+      const key = `mail:${email}|${job.tag}`;
+      if (!seen.has(key)) {
+        seen.add(key);
+        try {
+          await sendMail(email, `Family Calendar: ${title}`, `${body}\n\nhttps://youwest54.github.io/calendar/`);
+          sent.items.push({ tag: job.tag, at: job.at, endpoint: `mail:${email}` });
+          mailCount += 1;
+        } catch (err) {
+          seen.delete(key);
+          mailFail += 1;
+          console.log("mail", err.statusCode || "fail");
+        }
+      }
     }
   }
 }
@@ -140,4 +187,4 @@ sent.items = sent.items.filter((item) => Date.parse(item.at) > now - 14 * 24 * 6
 client.publish("ag/push/sent", encrypt(sent), { retain: true, qos: 0 });
 await new Promise((resolve) => setTimeout(resolve, 500));
 client.end(true);
-console.log(`devices ${devices.length} sent ${sentCount} fail ${failCount}`);
+console.log(`devices ${devices.length} sent ${sentCount} fail ${failCount} mail ${mailCount} mailfail ${mailFail}`);

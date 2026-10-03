@@ -903,7 +903,7 @@ h1 {
 
 .field > span { font-size: 13px; font-weight: 600; color: var(--muted); }
 
-input[type="text"], input[type="url"], input[type="date"], input[type="time"], input:not([type]), textarea, #linkField, #joinInput, #yourName, #partnerName, #babyName, #titleInput {
+input[type="text"], input[type="url"], input[type="email"], input[type="date"], input[type="time"], input:not([type]), textarea, #linkField, #joinInput, #yourName, #partnerName, #babyName, #reminderEmail, #titleInput {
   width: 100%;
   font-size: 16px;
   border: 1px solid var(--line);

@@ -122,6 +122,7 @@ function blankState() {
     code: null,
     deviceId: null,
     names: { me: "Youyou", partner: "Gepo", baby: "Baby", updatedAt: 0 },
+    email: "",
     events: [],
     dismissedWelcome: false
   };
@@ -141,6 +142,7 @@ function loadState() {
       code: cleanFamilyCode(raw.code).length === 8 ? cleanFamilyCode(raw.code) : null,
       deviceId: raw.deviceId || randomSecret(8),
       names: adoptNames(raw.names),
+      email: cleanEmail(raw.email),
       events: Array.isArray(raw.events) ? raw.events.map(normalize).filter(Boolean) : [],
       dismissedWelcome: !!raw.dismissedWelcome
     };
@@ -157,6 +159,7 @@ function saveState() {
     code: state.code,
     deviceId: state.deviceId,
     names: state.names,
+    email: state.email || "",
     events: state.events,
     dismissedWelcome: state.dismissedWelcome
   }));
@@ -704,7 +707,10 @@ let alertAgain = false;
 let alertTimer = 0;
 
 function scheduleAlerts() {
-  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  if (!window.isSecureContext) return;
+  const email = cleanEmail(state.email);
+  const allowed = "Notification" in window && Notification.permission === "granted";
+  if (!email && !allowed) return;
   clearTimeout(alertTimer);
   alertTimer = setTimeout(() => { void enableAlerts(); }, 1200);
 }
@@ -718,22 +724,32 @@ async function enableAlerts() {
   try {
     do {
       alertAgain = false;
-      if (!window.isSecureContext || !("Notification" in window) || Notification.permission !== "granted") return false;
-      if (!("serviceWorker" in navigator) || !("PushManager" in window)) return false;
-      const reg = await Promise.race([
-        navigator.serviceWorker.ready,
-        new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 4000))
-      ]);
-      let sub = await reg.pushManager.getSubscription();
-      if (!sub) {
-        sub = await reg.pushManager.subscribe({
-          userVisibleOnly: true,
-          applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
-        });
+      if (!window.isSecureContext) return false;
+      let subscription = null;
+      if ("Notification" in window && Notification.permission === "granted" && "serviceWorker" in navigator && "PushManager" in window) {
+        try {
+          const reg = await Promise.race([
+            navigator.serviceWorker.ready,
+            new Promise((_, reject) => setTimeout(() => reject(new Error("timeout")), 4000))
+          ]);
+          let sub = await reg.pushManager.getSubscription();
+          if (!sub) {
+            sub = await reg.pushManager.subscribe({
+              userVisibleOnly: true,
+              applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY)
+            });
+          }
+          subscription = sub.toJSON();
+        } catch {
+          subscription = null;
+        }
       }
+      const email = cleanEmail(state.email);
+      if (!subscription && !email) return false;
       const message = await encryptForServer({
         kind: "device",
-        subscription: sub.toJSON(),
+        subscription,
+        email,
         jobs: collectJobs()
       });
       await publishOnce(`ag/push/${state.deviceId}`, message);
@@ -744,6 +760,11 @@ async function enableAlerts() {
   } finally {
     alertBusy = false;
   }
+}
+
+function cleanEmail(value) {
+  const email = String(value || "").trim().toLowerCase().slice(0, 80);
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) ? email : "";
 }
 
 function eventWhen(event) {
@@ -1418,6 +1439,7 @@ function openShare() {
   $("yourName").value = state.names.me;
   $("partnerName").value = state.names.partner;
   $("babyName").value = state.names.baby;
+  $("reminderEmail").value = state.email || "";
   showShareWarning();
   paintShare();
   openSheet($("shareSheet"));
@@ -1434,6 +1456,21 @@ function saveNames() {
   $("partnerName").value = state.names.partner;
   $("babyName").value = state.names.baby;
   commit();
+}
+
+function saveEmail() {
+  const typed = $("reminderEmail").value.trim();
+  const email = cleanEmail(typed);
+  if (typed && !email) {
+    showToast("That email does not look right.");
+    return;
+  }
+  $("reminderEmail").value = email;
+  if (email === (state.email || "")) return;
+  state.email = email;
+  saveState();
+  scheduleAlerts();
+  if (email) showToast("Reminders will also come to that inbox. Confirm the first email.");
 }
 
 async function joinFromInput() {
@@ -1499,6 +1536,7 @@ function bind() {
   for (const id of ["yourName", "partnerName", "babyName"]) {
     $(id).addEventListener("change", saveNames);
   }
+  $("reminderEmail").addEventListener("change", saveEmail);
   $("titleInput").addEventListener("input", () => {
     draft.titleTouched = true;
     draft.title = $("titleInput").value;
