@@ -143,6 +143,9 @@ async function listCalendars(token) {
     if (!visible.length) return [{ id: "primary", writable: true, complete: true }];
     return visible.map((item) => ({
       id: item.primary ? "primary" : item.id,
+      summary: String(item.summary || ""),
+      primary: !!item.primary,
+      group: String(item.id || "").includes("group.calendar.google.com"),
       writable: item.accessRole === "owner" || item.accessRole === "writer",
       complete: true
     }));
@@ -277,6 +280,16 @@ function applyRemote(event, remote) {
   event.deleted = false;
 }
 
+function pickFamilyCalendar(calendars) {
+  const writable = calendars.filter((item) => item.writable && !item.primary);
+  const named = (item) => /family|famille/i.test(item.summary || "");
+  const groups = writable.filter((item) => item.group);
+  return writable.find((item) => item.group && named(item))
+    || writable.find(named)
+    || (groups.length === 1 ? groups[0] : null)
+    || null;
+}
+
 function eventUrl(calendarId, eventId) {
   const calendar = encodeURIComponent(calendarId || "primary");
   if (!eventId) return `https://www.googleapis.com/calendar/v3/calendars/${calendar}/events`;
@@ -287,6 +300,7 @@ export async function syncGoogle(token, events) {
   const bounds = windowBounds();
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
   const calendars = await listCalendars(token);
+  const home = pickFamilyCalendar(calendars);
   const googleEvents = [];
   const completeCals = new Set();
   const writable = new Set();
@@ -338,13 +352,32 @@ export async function syncGoogle(token, events) {
     }
     const remote = (event.gcalId && (byId.get(liveKey) || byId.get(event.gcalId))) || byFamily.get(event.id) || byPlan.get(planKey(event.date, event.time, event.title)) || null;
     if (!remote) {
-      const created = await gfetch(token, eventUrl("primary"), { method: "POST", body: JSON.stringify(toGoogle(event, zone)) });
-      created.calendarId = "primary";
+      if (!home) continue;
+      const created = await gfetch(token, eventUrl(home.id), { method: "POST", body: JSON.stringify(toGoogle(event, zone)) });
+      created.calendarId = home.id;
       event.gcalId = created.id;
-      event.gcalCal = "primary";
+      event.gcalCal = home.id;
       event.gcalAt = Date.now();
-      liveIds.add(`primary/${created.id}`);
+      liveIds.add(`${home.id}/${created.id}`);
       byPlan.set(planKey(event.date, event.time, event.title), created);
+      pushed += 1;
+      continue;
+    }
+    const ownedOnPrimary = remote.extendedProperties?.private?.familyId === event.id
+      && (!remote.calendarId || remote.calendarId === "primary");
+    if (home && ownedOnPrimary && home.id !== "primary") {
+      const created = await gfetch(token, eventUrl(home.id), { method: "POST", body: JSON.stringify(toGoogle(event, zone)) });
+      created.calendarId = home.id;
+      try {
+        await gfetch(token, eventUrl("primary", remote.id), { method: "DELETE" });
+        liveIds.delete(`primary/${remote.id}`);
+      } catch {
+        /* the family copy is already there */
+      }
+      event.gcalId = created.id;
+      event.gcalCal = home.id;
+      event.gcalAt = Date.now();
+      liveIds.add(`${home.id}/${created.id}`);
       pushed += 1;
       continue;
     }
@@ -399,5 +432,5 @@ export async function syncGoogle(token, events) {
     }
   }
 
-  return { events: next, added, pushed, changed };
+  return { events: next, added, pushed, changed, calendarName: home ? home.summary : "" };
 }

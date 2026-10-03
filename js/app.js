@@ -1,7 +1,7 @@
 import { categoryMark } from "./icons.js?v=28";
 import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
 import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY, GOOGLE_CLIENT_ID } from "./keys.js";
-import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=36";
+import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=37";
 
 const STORAGE_KEY = "our-agenda-v1";
 
@@ -1829,7 +1829,8 @@ async function autoSyncGoogle() {
     const token = await requestGoogleToken(GOOGLE_CLIENT_ID, { silent: true });
     const result = await applyGoogleSync(token);
     const parts = googleSummary(result);
-    if (parts.length) showToast(`Google synced. ${parts.join(". ")}.`);
+    if (!result.calendarName) showToast("Google family calendar was not found. Share a group calendar named Family.");
+    else if (parts.length) showToast(`Google synced on ${result.calendarName}. ${parts.join(". ")}.`);
   } catch (err) {
     if (err && err.status === 401) clearGoogleToken();
   } finally {
@@ -1862,7 +1863,8 @@ async function syncGoogleNow() {
     showToast("Syncing…");
     const result = await applyGoogleSync(token);
     const parts = googleSummary(result);
-    showToast(parts.length ? `Google synced. ${parts.join(". ")}. It will keep syncing on its own.` : "Google is up to date. It will keep syncing on its own.");
+    if (!result.calendarName) showToast("Google family calendar was not found. Share a group calendar named Family.");
+    else showToast(parts.length ? `Plans go to ${result.calendarName}. ${parts.join(". ")}.` : `Plans go to ${result.calendarName}. It will keep syncing on its own.`);
   } catch (err) {
     const message = String(err && err.message || "");
     if (message === "access_denied" || message === "popup_closed" || message === "popup_failed_to_open") {
