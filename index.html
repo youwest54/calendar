@@ -18,7 +18,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,560;9..144,640&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/app.css?v=31">
+  <link rel="stylesheet" href="css/app.css?v=32">
 </head>
 <body>
   <main class="app">
@@ -129,6 +129,16 @@
     <div class="step-dots" aria-hidden="true">
       <i class="step-dot"></i><i class="step-dot"></i><i class="step-dot"></i><i class="step-dot"></i>
     </div>
+    <div id="editExtras" hidden>
+      <div class="field">
+        <span>Urgent</span>
+        <button type="button" id="urgentToggle" class="plan-act urgent-act">Make urgent</button>
+      </div>
+      <div class="field">
+        <span>Color</span>
+        <div id="editColors" class="color-grid"></div>
+      </div>
+    </div>
     <div class="step" data-step="0">
       <p class="group">Choose a type</p>
       <div id="categories"></div>
@@ -185,6 +195,7 @@
         <input id="noteInput" maxlength="500" autocomplete="off" enterkeyhint="done" placeholder="Optional">
       </label>
     </div>
+    <div id="editSend" class="plan-actions" hidden></div>
     <div class="wizard-nav">
       <button type="button" id="stepBack" class="back-btn" hidden>Back</button>
       <button type="button" id="stepNext" class="save">Next</button>
@@ -262,6 +273,6 @@
   </div>
 
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
-  <script type="module" src="js/app.js?v=37"></script>
+  <script type="module" src="js/app.js?v=38"></script>
 </body>
 </html>

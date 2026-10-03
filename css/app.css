@@ -733,6 +733,17 @@ h1 {
 
 .day-sheet-list .event { margin-top: 0; }
 
+.day-sheet-list .plan-actions,
+.coming-list .plan-actions { grid-template-columns: 1fr; }
+
+#editor.edit-all { overflow: auto; }
+
+#editor.edit-all .step + .step { margin-top: 14px; }
+
+#urgentToggle { width: 100%; }
+
+#editSend { margin: 8px 0; }
+
 .step-dots {
   display: flex;
   justify-content: center;

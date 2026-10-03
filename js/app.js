@@ -557,34 +557,7 @@ function planActions(event) {
   edit.className = "plan-act edit-act";
   edit.textContent = "Edit";
   edit.addEventListener("click", () => openEditor(event));
-  const color = document.createElement("button");
-  color.type = "button";
-  color.className = "plan-act color-act";
-  const dot = document.createElement("i");
-  dot.style.background = eventColor(event);
-  color.append(dot, document.createTextNode("Color"));
-  color.addEventListener("click", () => openColorPicker(event));
-  const urgent = document.createElement("button");
-  urgent.type = "button";
-  urgent.className = "plan-act urgent-act";
-  urgent.textContent = event.urgent ? "Urgent" : "Make urgent";
-  urgent.setAttribute("aria-pressed", event.urgent ? "true" : "false");
-  urgent.addEventListener("click", () => toggleUrgent(event.id));
-  const remove = document.createElement("button");
-  remove.type = "button";
-  remove.className = "plan-act remove-act";
-  remove.textContent = "Remove";
-  remove.addEventListener("click", () => {
-    if (remove.dataset.armed !== "1") {
-      remove.dataset.armed = "1";
-      remove.textContent = "Sure?";
-      return;
-    }
-    removePlan(event.id);
-  });
-  const phone = phoneAction(event);
-  const google = googleAction(event);
-  actions.append(edit, color, urgent, remove, phone, google);
+  actions.append(edit);
   return actions;
 }
 
@@ -1373,19 +1346,63 @@ function openEditor(event) {
   openSheet($("editor"));
 }
 
+function paintUrgent() {
+  const button = $("urgentToggle");
+  const on = !!draft.urgent;
+  button.textContent = on ? "Urgent" : "Make urgent";
+  button.setAttribute("aria-pressed", on ? "true" : "false");
+}
+
+function paintEditColors() {
+  const current = eventColor(draft);
+  const box = $("editColors");
+  box.replaceChildren(...colorOptions(draft).map((choice) => {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "swatch";
+    if (choice === current) button.classList.add("on");
+    button.style.background = choice;
+    button.setAttribute("aria-label", choice === current ? "Current color" : "Choose this color");
+    button.addEventListener("click", () => {
+      const typeColor = (catById(draft.category)?.color || "#8d7b6a").toLowerCase();
+      draft.color = choice === typeColor ? "" : choice;
+      paintEditColors();
+    });
+    return button;
+  }));
+}
+
+function paintEditSend() {
+  const box = $("editSend");
+  const event = state.events.find((item) => item.id === draft.id && !item.deleted);
+  box.replaceChildren();
+  if (!event) return;
+  box.append(phoneAction(event), googleAction(event));
+}
+
 function showStep(index) {
-  step = index;
+  const all = !!(draft && draft.id);
+  step = all ? 3 : index;
+  $("editor").classList.toggle("edit-all", all);
+  $("editExtras").hidden = !all;
+  $("editSend").hidden = !all;
+  document.querySelector(".step-dots").hidden = all;
   document.querySelectorAll("#editor .step").forEach((el) => {
-    el.hidden = Number(el.dataset.step) !== index;
+    el.hidden = all ? false : Number(el.dataset.step) !== step;
   });
-  $("stepBack").hidden = index === 0;
-  $("stepNext").hidden = index === 3;
-  $("saveBtn").hidden = index !== 3;
-  $("deleteBtn").hidden = index !== 3 || !draft.id;
+  $("stepBack").hidden = all || step === 0;
+  $("stepNext").hidden = all || step === 3;
+  $("saveBtn").hidden = !(all || step === 3);
+  $("deleteBtn").hidden = !draft.id || !(all || step === 3);
   document.querySelectorAll(".step-dot").forEach((dot, i) => {
-    dot.classList.toggle("on", i === index);
-    dot.classList.toggle("done", i < index);
+    dot.classList.toggle("on", i === step);
+    dot.classList.toggle("done", i < step);
   });
+  if (all) {
+    paintUrgent();
+    paintEditColors();
+    paintEditSend();
+  }
 }
 
 function goNext() {
@@ -1450,6 +1467,7 @@ function chooseCategory(id) {
   document.querySelectorAll("#categories .cat").forEach((button) => {
     button.classList.toggle("on", button.dataset.id === id);
   });
+  if (draft.id) paintEditColors();
 }
 
 function chooseTime(value) {
@@ -2006,6 +2024,11 @@ function bind() {
   $("shareBtn").addEventListener("click", openShare);
   $("editor").addEventListener("submit", saveDraft);
   $("deleteBtn").addEventListener("click", deleteDraft);
+  $("urgentToggle").addEventListener("click", () => {
+    draft.urgent = !draft.urgent;
+    draft.urgentAt = draft.urgent ? (Number(draft.urgentAt) || Date.now()) : 0;
+    paintUrgent();
+  });
   $("startFamily").addEventListener("click", () => { void startFamily(); });
   $("copyCode").addEventListener("click", () => { void copyCode(); });
   $("joinBtn").addEventListener("click", () => { void joinFromInput(); });
