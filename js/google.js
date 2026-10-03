@@ -3,6 +3,8 @@ const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
 
 let tokenClient = null;
 let pending = null;
+let cached = null;
+let inflight = null;
 
 export function loadGoogleScript() {
   if (window.google?.accounts?.oauth2) return Promise.resolve();
@@ -16,13 +18,36 @@ export function loadGoogleScript() {
   });
 }
 
-export function requestGoogleToken(clientId) {
-  return new Promise((resolve, reject) => {
+export function clearGoogleToken() {
+  cached = null;
+}
+
+export function requestGoogleToken(clientId, options = {}) {
+  if (!options.fresh && cached && cached.until > Date.now() + 60000) {
+    return Promise.resolve(cached.token);
+  }
+  if (inflight) return inflight;
+  inflight = new Promise((resolve, reject) => {
     if (!window.google?.accounts?.oauth2) {
       reject(new Error("load"));
       return;
     }
-    pending = { resolve, reject };
+    const timer = setTimeout(() => {
+      if (pending) {
+        pending = null;
+        reject(new Error("timeout"));
+      }
+    }, 20000);
+    pending = {
+      resolve: (token) => {
+        clearTimeout(timer);
+        resolve(token);
+      },
+      reject: (error) => {
+        clearTimeout(timer);
+        reject(error);
+      }
+    };
     if (!tokenClient) {
       tokenClient = window.google.accounts.oauth2.initTokenClient({
         client_id: clientId,
@@ -32,12 +57,19 @@ export function requestGoogleToken(clientId) {
           pending = null;
           if (!wait) return;
           if (!response || response.error) wait.reject(new Error(response?.error || "access_denied"));
-          else wait.resolve(response.access_token);
+          else {
+            const seconds = Number(response.expires_in) || 3600;
+            cached = { token: response.access_token, until: Date.now() + seconds * 1000 };
+            wait.resolve(response.access_token);
+          }
         }
       });
     }
-    tokenClient.requestAccessToken({ prompt: "consent" });
+    tokenClient.requestAccessToken({ prompt: options.silent ? "" : "consent" });
+  }).finally(() => {
+    inflight = null;
   });
+  return inflight;
 }
 
 function isoDate(date) {

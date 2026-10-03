@@ -1,7 +1,7 @@
 import { categoryMark } from "./icons.js?v=28";
 import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
 import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY, GOOGLE_CLIENT_ID } from "./keys.js";
-import { loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=34";
+import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=35";
 
 const STORAGE_KEY = "our-agenda-v1";
 
@@ -177,11 +177,12 @@ function currentDoc() {
   };
 }
 
-function commit() {
+function commit(options = {}) {
   saveState();
   render();
   sync.publish();
   scheduleAlerts();
+  if (!options.skipGoogle) scheduleGoogleSync();
 }
 
 function clipName(value, fallback) {
@@ -296,6 +297,7 @@ function absorb(doc) {
   if (changed) sync.publish();
   void checkReminders();
   scheduleAlerts();
+  if (changed && googleDirty()) scheduleGoogleSync();
 }
 
 function setStatus(mode) {
@@ -1766,13 +1768,75 @@ function saveEmail(options = {}) {
   if (who.length) showToast(`Saved. Reminders will also come to ${who.join(" and ")}. Confirm the first email.`);
 }
 
+const GOOGLE_ON = "our-agenda-google-on";
+let googleBusy = false;
+let googleTimer = 0;
+
+function googleLinked() {
+  try {
+    return localStorage.getItem(GOOGLE_ON) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function markGoogleLinked() {
+  try {
+    localStorage.setItem(GOOGLE_ON, "1");
+  } catch {
+    /* private mode */
+  }
+}
+
+function googleDirty() {
+  return state.events.some((event) => !event.deleted && (!event.gcalId || (event.updatedAt || 0) > (event.gcalAt || 0)));
+}
+
+function googleSummary(result) {
+  const parts = [];
+  if (result.added) parts.push(result.added === 1 ? "1 plan brought in" : `${result.added} plans brought in`);
+  if (result.pushed) parts.push(result.pushed === 1 ? "1 plan sent to Google" : `${result.pushed} plans sent to Google`);
+  if (result.changed) parts.push(result.changed === 1 ? "1 plan updated" : `${result.changed} plans updated`);
+  return parts;
+}
+
+function scheduleGoogleSync() {
+  if (!GOOGLE_CLIENT_ID || !googleLinked()) return;
+  clearTimeout(googleTimer);
+  googleTimer = setTimeout(() => { void autoSyncGoogle(); }, 4000);
+}
+
+async function applyGoogleSync(token) {
+  const before = eventSig(state.events);
+  const result = await syncGoogle(token, state.events);
+  state.events = result.events.map(normalize).filter(Boolean);
+  if (eventSig(state.events) !== before) commit({ skipGoogle: true });
+  return result;
+}
+
+async function autoSyncGoogle() {
+  if (!GOOGLE_CLIENT_ID || !googleLinked() || googleBusy) return;
+  googleBusy = true;
+  try {
+    await loadGoogleScript();
+    const token = await requestGoogleToken(GOOGLE_CLIENT_ID, { silent: true });
+    const result = await applyGoogleSync(token);
+    const parts = googleSummary(result);
+    if (parts.length) showToast(`Google synced. ${parts.join(". ")}.`);
+  } catch (err) {
+    if (err && err.status === 401) clearGoogleToken();
+  } finally {
+    googleBusy = false;
+  }
+}
+
 async function syncGoogleNow() {
   const button = $("googleSync");
   if (!GOOGLE_CLIENT_ID) {
     showToast("Google sign-in is not ready yet.");
     return;
   }
-  if (button.disabled) return;
+  if (button.disabled || googleBusy) return;
   if (!window.google?.accounts?.oauth2) {
     try {
       await loadGoogleScript();
@@ -1781,27 +1845,28 @@ async function syncGoogleNow() {
       return;
     }
   }
+  const silent = googleLinked();
   button.disabled = true;
-  showToast("Opening Google…");
+  googleBusy = true;
+  if (!silent) showToast("Opening Google…");
   try {
-    const token = await requestGoogleToken(GOOGLE_CLIENT_ID);
+    const token = await requestGoogleToken(GOOGLE_CLIENT_ID, { silent });
+    markGoogleLinked();
     showToast("Syncing…");
-    const result = await syncGoogle(token, state.events);
-    state.events = result.events.map(normalize).filter(Boolean);
-    commit();
-    const parts = [];
-    if (result.added) parts.push(result.added === 1 ? "1 plan brought in" : `${result.added} plans brought in`);
-    if (result.pushed) parts.push(result.pushed === 1 ? "1 plan sent to Google" : `${result.pushed} plans sent to Google`);
-    if (result.changed) parts.push(result.changed === 1 ? "1 plan updated" : `${result.changed} plans updated`);
-    showToast(parts.length ? `Google synced. ${parts.join(". ")}.` : "Google is up to date.");
+    const result = await applyGoogleSync(token);
+    const parts = googleSummary(result);
+    showToast(parts.length ? `Google synced. ${parts.join(". ")}. It will keep syncing on its own.` : "Google is up to date. It will keep syncing on its own.");
   } catch (err) {
     const message = String(err && err.message || "");
     if (message === "access_denied" || message === "popup_closed" || message === "popup_failed_to_open") {
       showToast("Google was closed. Tap Sync Google Calendar again.");
+    } else if (silent) {
+      showToast("Tap Sync Google Calendar and Allow once more.");
     } else {
       showToast("Google did not sync. Tap again.");
     }
   } finally {
+    googleBusy = false;
     button.disabled = false;
   }
 }
@@ -2035,10 +2100,13 @@ async function boot() {
     if (document.visibilityState === "visible") {
       sync.nudge();
       void checkReminders();
+      void autoSyncGoogle();
     }
   });
   void checkReminders();
   setInterval(() => { void checkReminders(); }, 60000);
+  setInterval(() => { void autoSyncGoogle(); }, 180000);
+  setTimeout(() => { void autoSyncGoogle(); }, 1500);
   window.addEventListener("pageshow", (event) => {
     if (event.persisted) sync.nudge();
   });
