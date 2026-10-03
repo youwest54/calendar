@@ -1,5 +1,4 @@
-const SCOPE = "https://www.googleapis.com/auth/calendar.events";
-const API = "https://www.googleapis.com/calendar/v3/calendars/primary/events";
+const SCOPE = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
 
 let tokenClient = null;
 let pending = null;
@@ -99,9 +98,9 @@ function plusHour(date, time) {
 
 function windowBounds() {
   const start = new Date();
-  start.setDate(start.getDate() - 60);
+  start.setFullYear(start.getFullYear() - 10);
   const end = new Date();
-  end.setDate(end.getDate() + 400);
+  end.setFullYear(end.getFullYear() + 10);
   return { from: isoDate(start), to: isoDate(end), timeMin: start.toISOString(), timeMax: end.toISOString() };
 }
 
@@ -129,11 +128,36 @@ async function gfetch(token, url, options = {}) {
   return data;
 }
 
-async function listEvents(token, bounds) {
+async function listCalendars(token) {
+  try {
+    const items = [];
+    let page = "";
+    do {
+      const url = new URL("https://www.googleapis.com/calendar/v3/users/me/calendarList");
+      if (page) url.searchParams.set("pageToken", page);
+      const data = await gfetch(token, url);
+      items.push(...(data.items || []));
+      page = data.nextPageToken || "";
+    } while (page);
+    const visible = items.filter((item) => item.id && item.accessRole && item.accessRole !== "freeBusyReader");
+    if (!visible.length) return [{ id: "primary", writable: true, complete: true }];
+    return visible.map((item) => ({
+      id: item.primary ? "primary" : item.id,
+      writable: item.accessRole === "owner" || item.accessRole === "writer",
+      complete: true
+    }));
+  } catch {
+    return [{ id: "primary", writable: true, complete: true }];
+  }
+}
+
+async function listEvents(token, calendarId, bounds) {
   const all = [];
   let page = "";
+  let complete = true;
+  const base = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`;
   do {
-    const url = new URL(API);
+    const url = new URL(base);
     url.searchParams.set("singleEvents", "true");
     url.searchParams.set("showDeleted", "false");
     url.searchParams.set("orderBy", "startTime");
@@ -142,10 +166,15 @@ async function listEvents(token, bounds) {
     url.searchParams.set("timeMax", bounds.timeMax);
     if (page) url.searchParams.set("pageToken", page);
     const data = await gfetch(token, url);
+    for (const item of data.items || []) item.calendarId = calendarId;
     all.push(...(data.items || []));
     page = data.nextPageToken || "";
-  } while (page && all.length < 1000);
-  return all;
+    if (page && all.length >= 4000) {
+      complete = false;
+      break;
+    }
+  } while (page);
+  return { items: all, complete };
 }
 
 function toGoogle(event, zone) {
@@ -171,6 +200,10 @@ function toGoogle(event, zone) {
     body.end = { date: addDays(finish, 1) };
   }
   return body;
+}
+
+function planKey(date, time, title) {
+  return `${date}|${time || ""}|${String(title || "").trim().toLowerCase()}`;
 }
 
 function fromRemote(remote) {
@@ -219,6 +252,7 @@ function fromRemote(remote) {
     urgent: false,
     urgentAt: 0,
     gcalId: remote.id,
+    gcalCal: remote.calendarId || "primary",
     gcalAt: now,
     updatedAt: now,
     deleted: false
@@ -237,60 +271,103 @@ function applyRemote(event, remote) {
   if (incoming.who) event.who = incoming.who;
   if (incoming.color) event.color = incoming.color;
   event.gcalId = remote.id;
+  event.gcalCal = remote.calendarId || event.gcalCal || "primary";
   event.updatedAt = Date.now();
   event.gcalAt = event.updatedAt;
   event.deleted = false;
 }
 
+function eventUrl(calendarId, eventId) {
+  const calendar = encodeURIComponent(calendarId || "primary");
+  if (!eventId) return `https://www.googleapis.com/calendar/v3/calendars/${calendar}/events`;
+  return `https://www.googleapis.com/calendar/v3/calendars/${calendar}/events/${encodeURIComponent(eventId)}`;
+}
+
 export async function syncGoogle(token, events) {
   const bounds = windowBounds();
   const zone = Intl.DateTimeFormat().resolvedOptions().timeZone || "UTC";
-  const googleEvents = await listEvents(token, bounds);
-  const byId = new Map(googleEvents.map((item) => [item.id, item]));
-  const byFamily = new Map();
-  for (const item of googleEvents) {
-    const familyId = item.extendedProperties?.private?.familyId;
-    if (familyId) byFamily.set(familyId, item);
+  const calendars = await listCalendars(token);
+  const googleEvents = [];
+  const completeCals = new Set();
+  const writable = new Set();
+  for (const calendar of calendars) {
+    if (calendar.writable) writable.add(calendar.id);
+    try {
+      const listed = await listEvents(token, calendar.id, bounds);
+      googleEvents.push(...listed.items);
+      if (listed.complete) completeCals.add(calendar.id);
+    } catch {
+      /* a calendar we cannot read stays out of the delete check */
+    }
   }
-  const liveIds = new Set(googleEvents.map((item) => item.id));
+  const byId = new Map();
+  const byFamily = new Map();
+  const byPlan = new Map();
+  for (const item of googleEvents) {
+    const key = `${item.calendarId || "primary"}/${item.id}`;
+    byId.set(key, item);
+    byId.set(item.id, byId.get(item.id) || item);
+    const familyId = item.extendedProperties?.private?.familyId;
+    if (familyId && !byFamily.has(familyId)) byFamily.set(familyId, item);
+    const incoming = fromRemote(item);
+    if (incoming) {
+      const plan = planKey(incoming.date, incoming.time, incoming.title);
+      if (!byPlan.has(plan)) byPlan.set(plan, item);
+    }
+  }
+  const liveIds = new Set(googleEvents.map((item) => `${item.calendarId || "primary"}/${item.id}`));
   const next = events.map((event) => ({ ...event }));
   let added = 0;
   let pushed = 0;
   let changed = 0;
 
   for (const event of next) {
+    const cal = event.gcalCal || "primary";
+    const liveKey = event.gcalId ? `${cal}/${event.gcalId}` : "";
     if (event.deleted) {
-      if (event.gcalId && liveIds.has(event.gcalId)) {
-        await gfetch(token, `${API}/${encodeURIComponent(event.gcalId)}`, { method: "DELETE" });
-        liveIds.delete(event.gcalId);
-        pushed += 1;
+      if (event.gcalId && liveIds.has(liveKey) && (writable.has(cal) || cal === "primary")) {
+        try {
+          await gfetch(token, eventUrl(cal, event.gcalId), { method: "DELETE" });
+          liveIds.delete(liveKey);
+          pushed += 1;
+        } catch {
+          /* read-only calendar */
+        }
       }
       continue;
     }
-    const remote = (event.gcalId && byId.get(event.gcalId)) || byFamily.get(event.id) || null;
+    const remote = (event.gcalId && (byId.get(liveKey) || byId.get(event.gcalId))) || byFamily.get(event.id) || byPlan.get(planKey(event.date, event.time, event.title)) || null;
     if (!remote) {
-      if (!inWindow(event, bounds)) continue;
-      const created = await gfetch(token, API, { method: "POST", body: JSON.stringify(toGoogle(event, zone)) });
+      const created = await gfetch(token, eventUrl("primary"), { method: "POST", body: JSON.stringify(toGoogle(event, zone)) });
+      created.calendarId = "primary";
       event.gcalId = created.id;
+      event.gcalCal = "primary";
       event.gcalAt = Date.now();
-      liveIds.add(created.id);
+      liveIds.add(`primary/${created.id}`);
+      byPlan.set(planKey(event.date, event.time, event.title), created);
       pushed += 1;
       continue;
     }
     event.gcalId = remote.id;
+    event.gcalCal = remote.calendarId || "primary";
     const remoteAt = Date.parse(remote.updated) || 0;
     const localDirty = (event.updatedAt || 0) > (event.gcalAt || 0);
     const remoteDirty = remoteAt > (event.gcalAt || 0);
+    const canWrite = writable.has(event.gcalCal) || event.gcalCal === "primary";
     if (remoteDirty && (!localDirty || remoteAt >= (event.updatedAt || 0))) {
       applyRemote(event, remote);
       changed += 1;
-    } else if (localDirty) {
-      await gfetch(token, `${API}/${encodeURIComponent(remote.id)}`, {
-        method: "PATCH",
-        body: JSON.stringify(toGoogle(event, zone))
-      });
-      event.gcalAt = Date.now();
-      pushed += 1;
+    } else if (localDirty && canWrite) {
+      try {
+        await gfetch(token, eventUrl(event.gcalCal, remote.id), {
+          method: "PATCH",
+          body: JSON.stringify(toGoogle(event, zone))
+        });
+        event.gcalAt = Date.now();
+        pushed += 1;
+      } catch {
+        event.gcalAt = Date.now();
+      }
     } else if (!event.gcalAt) {
       event.gcalAt = Date.now();
     }
@@ -298,19 +375,23 @@ export async function syncGoogle(token, events) {
 
   const knownIds = new Set(next.map((event) => event.gcalId).filter(Boolean));
   const knownFamily = new Set(next.map((event) => event.id));
+  const knownPlans = new Set(next.filter((event) => !event.deleted).map((event) => planKey(event.date, event.time, event.title)));
   for (const remote of googleEvents) {
     const familyId = remote.extendedProperties?.private?.familyId || "";
-    if (knownIds.has(remote.id) || (familyId && knownFamily.has(familyId))) continue;
-    const local = fromRemote(remote);
-    if (!local) continue;
-    next.push(local);
+    const incoming = fromRemote(remote);
+    if (!incoming) continue;
+    const plan = planKey(incoming.date, incoming.time, incoming.title);
+    if (knownIds.has(remote.id) || (familyId && knownFamily.has(familyId)) || knownPlans.has(plan)) continue;
+    next.push(incoming);
     knownIds.add(remote.id);
+    knownPlans.add(plan);
     added += 1;
   }
 
   for (const event of next) {
-    if (event.deleted || !event.gcalId || !inWindow(event, bounds)) continue;
-    if (!liveIds.has(event.gcalId)) {
+    const cal = event.gcalCal || "primary";
+    if (event.deleted || !event.gcalId || !completeCals.has(cal) || !inWindow(event, bounds)) continue;
+    if (!liveIds.has(`${cal}/${event.gcalId}`)) {
       event.deleted = true;
       event.updatedAt = Date.now();
       event.gcalAt = event.updatedAt;

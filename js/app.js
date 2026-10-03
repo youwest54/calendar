@@ -1,7 +1,7 @@
 import { categoryMark } from "./icons.js?v=28";
 import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
 import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY, GOOGLE_CLIENT_ID } from "./keys.js";
-import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=35";
+import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=36";
 
 const STORAGE_KEY = "our-agenda-v1";
 
@@ -247,6 +247,7 @@ function normalize(event) {
     urgentAt: event.urgent ? (Number(event.urgentAt) || Number(event.updatedAt) || 0) : 0,
     updatedAt: Number(event.updatedAt) || 0,
     gcalId: String(event.gcalId || "").slice(0, 120),
+    gcalCal: String(event.gcalCal || "").slice(0, 200),
     gcalAt: Number(event.gcalAt) || 0,
     deleted: !!event.deleted
   };
@@ -254,7 +255,7 @@ function normalize(event) {
 
 function eventSig(list) {
   return list
-    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.urgentAt || 0, event.noticeAt || 0, (event.notices || []).join(","), event.date, event.end || "", event.time, event.title, event.category, event.who, event.note, event.color, event.gcalId || "", event.gcalAt || 0].join("|"))
+    .map((event) => [event.id, event.updatedAt, event.deleted ? 1 : 0, event.urgent ? 1 : 0, event.urgentAt || 0, event.noticeAt || 0, (event.notices || []).join(","), event.date, event.end || "", event.time, event.title, event.category, event.who, event.note, event.color, event.gcalId || "", event.gcalCal || "", event.gcalAt || 0].join("|"))
     .sort()
     .join("\n");
 }
@@ -1494,6 +1495,7 @@ function saveDraft(event) {
     urgent: !!draft.urgent,
     urgentAt: draft.urgent ? (Number(draft.urgentAt) || Date.now()) : 0,
     gcalId: previous?.gcalId || "",
+    gcalCal: previous?.gcalCal || "",
     gcalAt: previous?.gcalAt || 0,
     updatedAt: Date.now(),
     deleted: false
@@ -1772,17 +1774,22 @@ const GOOGLE_ON = "our-agenda-google-on";
 let googleBusy = false;
 let googleTimer = 0;
 
-function googleLinked() {
+function googleFlag() {
   try {
-    return localStorage.getItem(GOOGLE_ON) === "1";
+    return localStorage.getItem(GOOGLE_ON) || "";
   } catch {
-    return false;
+    return "";
   }
+}
+
+function googleLinked() {
+  const value = googleFlag();
+  return value === "1" || value === "2";
 }
 
 function markGoogleLinked() {
   try {
-    localStorage.setItem(GOOGLE_ON, "1");
+    localStorage.setItem(GOOGLE_ON, "2");
   } catch {
     /* private mode */
   }
@@ -1845,7 +1852,7 @@ async function syncGoogleNow() {
       return;
     }
   }
-  const silent = googleLinked();
+  const silent = googleFlag() === "2";
   button.disabled = true;
   googleBusy = true;
   if (!silent) showToast("Opening Google…");
