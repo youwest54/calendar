@@ -1,7 +1,7 @@
 import { categoryMark } from "./icons.js?v=28";
 import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
 import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY, GOOGLE_CLIENT_ID } from "./keys.js";
-import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=37";
+import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle } from "./google.js?v=39";
 
 const STORAGE_KEY = "our-agenda-v1";
 

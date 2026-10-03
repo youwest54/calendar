@@ -1,4 +1,5 @@
 const SCOPE = "https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.readonly";
+const GOOGLE_COLOR = "#3c6fba";
 
 let tokenClient = null;
 let pending = null;
@@ -209,6 +210,13 @@ function planKey(date, time, title) {
   return `${date}|${time || ""}|${String(title || "").trim().toLowerCase()}`;
 }
 
+function importedColor(remote) {
+  const extra = remote.extendedProperties?.private || {};
+  if (/^#[0-9a-f]{6}$/i.test(extra.color || "")) return extra.color.toLowerCase();
+  if (extra.familyId) return "";
+  return GOOGLE_COLOR;
+}
+
 function fromRemote(remote) {
   const start = remote.start || {};
   const end = remote.end || {};
@@ -237,7 +245,7 @@ function fromRemote(remote) {
   const extra = remote.extendedProperties?.private || {};
   const now = Date.now();
   const who = ["me", "partner", "both", "baby"].includes(extra.who) ? extra.who : "both";
-  const color = /^#[0-9a-f]{6}$/i.test(extra.color || "") ? extra.color.toLowerCase() : "";
+  const color = importedColor(remote);
   const id = String(extra.familyId || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 48)
     || `g${String(remote.id || "").replace(/[^A-Za-z0-9_-]/g, "").slice(0, 40)}`;
   return {
@@ -265,6 +273,7 @@ function fromRemote(remote) {
 function applyRemote(event, remote) {
   const incoming = fromRemote(remote);
   if (!incoming) return;
+  const extra = remote.extendedProperties?.private || {};
   event.date = incoming.date;
   event.end = incoming.end;
   event.time = incoming.time;
@@ -272,7 +281,9 @@ function applyRemote(event, remote) {
   event.note = incoming.note;
   if (incoming.category) event.category = incoming.category;
   if (incoming.who) event.who = incoming.who;
-  if (incoming.color) event.color = incoming.color;
+  const explicit = /^#[0-9a-f]{6}$/i.test(extra.color || "") ? extra.color.toLowerCase() : "";
+  if (explicit) event.color = explicit;
+  else if (!event.color && !extra.familyId) event.color = GOOGLE_COLOR;
   event.gcalId = remote.id;
   event.gcalCal = remote.calendarId || event.gcalCal || "primary";
   event.updatedAt = Date.now();
@@ -430,6 +441,15 @@ export async function syncGoogle(token, events) {
       event.gcalAt = event.updatedAt;
       changed += 1;
     }
+  }
+
+  const stamped = Date.now();
+  for (const event of next) {
+    if (event.deleted || event.color || !String(event.id || "").startsWith("g")) continue;
+    event.color = GOOGLE_COLOR;
+    event.updatedAt = stamped;
+    event.gcalAt = stamped;
+    changed += 1;
   }
 
   return { events: next, added, pushed, changed, calendarName: home ? home.summary : "" };
