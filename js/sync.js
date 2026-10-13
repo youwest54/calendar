@@ -187,7 +187,7 @@ export function createSync({ getDoc, onRemote, onReady, onStatus }) {
           /* ignore */
         }
       }
-    }, 8000);
+    }, 20000);
 
     socket.onopen = () => {
       if (gen !== generation) return;
@@ -212,7 +212,7 @@ export function createSync({ getDoc, onRemote, onReady, onStatus }) {
       canSend = false;
       clearTimers();
       setStatus("offline");
-      const delay = Math.min(15000, 800 * 2 ** Math.min(retries, 4));
+      const delay = Math.min(12000, 400 * 2 ** Math.min(retries, 4));
       retries += 1;
       setTimeout(() => {
         if (gen === generation && !stopped) connect();

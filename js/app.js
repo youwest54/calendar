@@ -1,5 +1,5 @@
 import { categoryMark } from "./icons.js?v=28";
-import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js";
+import { cleanFamilyCode, createSync, makeFamilyCode, publishOnce, randomSecret, roomFromCode } from "./sync.js?v=41";
 import { REMINDER_PUBLIC_KEY, VAPID_PUBLIC_KEY, GOOGLE_CLIENT_ID } from "./keys.js";
 import { clearGoogleToken, loadGoogleScript, requestGoogleToken, syncGoogle, GOOGLE_IMPORT_COLOR } from "./google.js?v=40";
 
