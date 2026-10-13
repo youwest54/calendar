@@ -66,35 +66,69 @@ function encrypt(obj) {
   return `p1.${bufToB64url(wrapped)}.${bufToB64url(joined)}`;
 }
 
-function listen(ms) {
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function openBroker(listenMs) {
   const messages = new Map();
   const client = mqtt.connect("wss://broker.hivemq.com:8884/mqtt", {
     clientId: `agjob${Math.random().toString(16).slice(2, 10)}`,
+    protocolVersion: 4,
+    clean: true,
     reconnectPeriod: 0,
-    connectTimeout: 8000
+    connectTimeout: 20000,
+    keepalive: 30
   });
   client.on("message", (topic, payload) => {
     messages.set(topic, payload.toString("utf8"));
   });
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => {
-      client.end(true);
-      reject(new Error("connect"));
-    }, 10000);
-    client.on("error", () => {});
+    let settled = false;
+    let connected = false;
+    const fail = (reason) => {
+      if (settled || connected) return;
+      settled = true;
+      clearTimeout(timer);
+      try { client.end(true); } catch { /* ignore */ }
+      reject(new Error(reason));
+    };
+    const timer = setTimeout(() => fail("connect"), 25000);
+    client.on("error", () => fail("connect"));
+    client.on("close", () => fail("connect"));
     client.on("connect", () => {
+      connected = true;
       client.subscribe("ag/push/#", { qos: 0 }, (err) => {
         if (err) {
+          settled = true;
           clearTimeout(timer);
-          client.end(true);
-          reject(err);
+          try { client.end(true); } catch { /* ignore */ }
+          reject(new Error("subscribe"));
           return;
         }
-        setTimeout(() => resolve({ client, messages }), ms);
         clearTimeout(timer);
+        setTimeout(() => {
+          if (settled) return;
+          settled = true;
+          resolve({ client, messages });
+        }, listenMs);
       });
     });
   });
+}
+
+async function listen(ms) {
+  let last = new Error("connect");
+  for (let attempt = 1; attempt <= 4; attempt += 1) {
+    try {
+      return await openBroker(ms);
+    } catch (err) {
+      last = err;
+      console.log(`broker ${err.message || "fail"} try ${attempt}`);
+      if (attempt < 4) await sleep(2000 * attempt);
+    }
+  }
+  throw last;
 }
 
 function cleanEmail(value) {
@@ -132,7 +166,15 @@ function deviceEmails(device) {
   return found.slice(0, 2);
 }
 
-const { client, messages } = await listen(6000);
+let client;
+let messages;
+try {
+  ({ client, messages } = await listen(8000));
+} catch {
+  console.log("broker unavailable, next run will try again");
+  process.exit(0);
+}
+
 let sent = { kind: "sent", items: [] };
 const devices = [];
 for (const [topic, raw] of messages) {
@@ -195,6 +237,6 @@ for (const device of devices) {
 }
 sent.items = sent.items.filter((item) => Date.parse(item.at) > now - 14 * 24 * 60 * 60 * 1000);
 client.publish("ag/push/sent", encrypt(sent), { retain: true, qos: 0 });
-await new Promise((resolve) => setTimeout(resolve, 500));
+await sleep(500);
 client.end(true);
 console.log(`devices ${devices.length} sent ${sentCount} fail ${failCount} mail ${mailCount} mailfail ${mailFail}`);
